@@ -1,18 +1,22 @@
 import { isFileName } from '@milesight/shared/src/utils/tools';
 
+/**
+ * Plugin names to load (must match control-panel folders).
+ * Uses same source as useLoadPlugins controlPanelsMap.
+ */
 const folderNames = (() => {
-    /** Extract the name of the subfolder */
     const getFolderName = (modules: ModuleType) => {
-        return Object.keys(modules).reduce((bucket, path) => {
-            const [, folder] = path?.split('/') || [];
-            if (!folder || bucket.includes(folder) || isFileName(folder)) return bucket;
-
+        const bucket: string[] = [];
+        for (const path of Object.keys(modules)) {
+            const m = path.match(/\/([^/]+)\/control-panel\/index\.ts$/);
+            const folder = m?.[1];
+            if (!folder || bucket.includes(folder) || isFileName(folder)) continue;
             bucket.push(folder);
-            return bucket;
-        }, [] as string[]);
+        }
+        return bucket.sort();
     };
 
-    const modules = import.meta.glob('../plugins/**');
+    const modules = import.meta.glob('./*/control-panel/index.ts');
     return getFolderName(modules);
 })();
 
