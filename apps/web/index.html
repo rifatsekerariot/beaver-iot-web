@@ -15,6 +15,7 @@
     </head>
     <body>
         <div id="root"></div>
+        <script type="module" src="/src/main.tsx"></script>
         <script>
             // Check backend status before loading React app
             // If backend is not ready, redirect to loading page
@@ -36,21 +37,12 @@
                         window.location.href = '/loading.html';
                         return;
                     }
-                    // Backend is ready, continue loading React app
-                    loadReactApp();
+                    // Backend is ready, React app will load normally via script tag above
                 })
                 .catch(error => {
                     // Backend not ready, redirect to loading page
                     window.location.href = '/loading.html';
                 });
-                
-                function loadReactApp() {
-                    // Load React app normally
-                    const script = document.createElement('script');
-                    script.type = 'module';
-                    script.src = '/src/main.tsx';
-                    document.body.appendChild(script);
-                }
             })();
         </script>
     </body>
