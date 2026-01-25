@@ -224,6 +224,8 @@
     "common.message.upload_error_file_invalid_type": "File type must be {1}.",
     "common.message.upload_error_file_too_large": "File is larger than {1}.",
     "common.message.upload_error_file_too_small": "File is smaller than {1}.",
+    "common.message.backend_initializing": "Initializing backend...",
+    "common.message.backend_initializing_desc": "Please wait while the system is starting up.",
     "common.message.upload_error_server_error": "Upload failed, please try again later.",
     "common.message.upload_error_too_many_files": "Only one image can be uploaded",
     "common.modal.desc_leave_current_page": "Changes you made may not be saved. Are you sure you want to leave this page?",

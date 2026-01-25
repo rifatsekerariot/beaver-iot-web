@@ -226,6 +226,8 @@
     "common.message.upload_error_file_too_small": "文件大小小于{1}。",
     "common.message.upload_error_server_error": "上传失败，请稍后重试。",
     "common.message.upload_error_too_many_files": "仅支持上传一张图片",
+    "common.message.backend_initializing": "正在初始化后端...",
+    "common.message.backend_initializing_desc": "请稍候，系统正在启动中。",
     "common.modal.desc_leave_current_page": "您所调整的内容不会保存，是否确认离开此页面？",
     "common.modal.title_leave_current_page": "离开当前页面",
     "common.modal.title_system_upgrade": "系统升级",

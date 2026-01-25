@@ -5,6 +5,7 @@ import { baseUrl } from '@milesight/shared/src/config';
 import { i18n, theme } from '@milesight/shared/src/services';
 import '@milesight/shared/src/utils/lang-polyfill';
 import routes from '@/routes';
+import { BackendReadyCheck } from '@/components';
 import '@/styles/index.less';
 
 const router = createBrowserRouter(routes, { basename: baseUrl || '/' });
@@ -23,6 +24,8 @@ theme.initTheme();
  */
 root.render(
     <React.StrictMode>
-        <RouterProvider router={router} />
+        <BackendReadyCheck>
+            <RouterProvider router={router} />
+        </BackendReadyCheck>
     </React.StrictMode>,
 );
