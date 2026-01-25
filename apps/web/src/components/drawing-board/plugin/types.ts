@@ -116,7 +116,19 @@ export type PluginType =
     | 'trigger'
     | 'deviceList'
     | 'map'
-    | 'alarm';
+    | 'alarm'
+    | 'alertIndicator'
+    | 'airQualityCard'
+    | 'statusBadge'
+    | 'counterCard'
+    | 'securityIcon'
+    | 'thermostatDial'
+    | 'rainfallHistogram'
+    | 'signalQualityDial'
+    | 'hvacSchematic'
+    | 'windRose'
+    | 'networkTable'
+    | 'industrialGauges';
 
 /**
  * The plugin control panel config

@@ -68,6 +68,18 @@ export function useResponsiveLayout(widgets: WidgetDetail[]) {
             case 'switch':
             case 'trigger':
             case 'progress':
+            case 'alertIndicator':
+            case 'airQualityCard':
+            case 'statusBadge':
+            case 'counterCard':
+            case 'securityIcon':
+            case 'thermostatDial':
+            case 'rainfallHistogram':
+            case 'signalQualityDial':
+            case 'hvacSchematic':
+            case 'windRose':
+            case 'networkTable':
+            case 'industrialGauges':
                 return width < 2 ? 2 : width;
             default:
                 return width;
