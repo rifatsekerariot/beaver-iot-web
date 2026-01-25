@@ -113,6 +113,14 @@ export const getGeoLocation = (
                 });
             },
             error => {
+                // Error code 1 = PERMISSION_DENIED or SECURE_ORIGIN_REQUIRED (HTTP not allowed)
+                if (error.code === 1) {
+                    const isSecureOrigin = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                    if (!isSecureOrigin) {
+                        reject(new Error('Geolocation requires HTTPS or localhost. Please select location on the map or enter coordinates manually.'));
+                        return;
+                    }
+                }
                 console.error('Geolocation error:', error.code, error.message);
                 reject(error);
             },

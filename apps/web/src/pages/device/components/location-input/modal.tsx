@@ -85,8 +85,14 @@ const InputModal: React.FC<Props> = memo(({ data, visible, onCancel, onConfirm, 
     // const [formLat, formLng] = watch(['latitude', 'longitude']);
 
     const handleConfirm = handleSubmit(data => {
-        onConfirm(data);
-        setLocation({ ...data });
+        // Ensure latitude/longitude are numbers (form may return strings)
+        const locationData: LocationType = {
+            ...data,
+            latitude: typeof data.latitude === 'string' ? parseFloat(data.latitude) : data.latitude,
+            longitude: typeof data.longitude === 'string' ? parseFloat(data.longitude) : data.longitude,
+        };
+        onConfirm(locationData);
+        setLocation(locationData);
     });
 
     // ---------- Location Data Update and Interactions ----------
@@ -97,22 +103,34 @@ const InputModal: React.FC<Props> = memo(({ data, visible, onCancel, onConfirm, 
             console.error(err);
             const { latitude, longitude } = getValues();
 
+            // If HTTP (not HTTPS/localhost), geolocation won't work - show helpful message
+            const isHttp = window.location.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(window.location.hostname);
+            const errorMsg = isHttp && err.message?.includes('HTTPS')
+                ? getIntlText('device.message.get_location_failed') + ' (HTTP not supported. Click on map or enter coordinates manually.)'
+                : getIntlText('device.message.get_location_failed');
+
             if (!latitude && !longitude) {
+                // Set default center (Istanbul) so user can click on map
                 setLocation(d => {
                     if (d && (!isNil(d.latitude) || !isNil(d.longitude))) {
                         return d;
                     }
-
+                    // Default to Istanbul, Turkey (reasonable center for many users)
+                    const defaultLat = 41.0082;
+                    const defaultLng = 28.9784;
+                    if (mapInstance) {
+                        mapInstance.setView([defaultLat, defaultLng], PREFER_ZOOM_LEVEL);
+                    }
                     return {
                         ...d,
-                        latitude: 0,
-                        longitude: 0,
+                        latitude: defaultLat,
+                        longitude: defaultLng,
                     };
                 });
             }
             toast.error({
                 key: 'get_location_failed',
-                content: getIntlText('device.message.get_location_failed'),
+                content: errorMsg,
             });
         },
         onSuccess(latlng) {

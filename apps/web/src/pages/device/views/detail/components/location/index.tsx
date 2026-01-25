@@ -149,12 +149,18 @@ const Location: React.FC<Props> = ({ data, onEditSuccess }) => {
         if (!data?.id) return;
         const formData = getValues();
 
-        // console.log({ formData, location });
+        // Ensure latitude/longitude are numbers (form may return strings)
+        const locationData: LocationType = {
+            ...formData,
+            latitude: typeof formData.latitude === 'string' ? parseFloat(formData.latitude) : formData.latitude,
+            longitude: typeof formData.longitude === 'string' ? parseFloat(formData.longitude) : formData.longitude,
+        };
+
         setLoading(true);
         const [err, res] = await awaitWrap(
             deviceAPI.setLocation({
                 id: data.id,
-                ...formData,
+                ...locationData,
             }),
         );
 
