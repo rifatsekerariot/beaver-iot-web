@@ -15,6 +15,43 @@
     </head>
     <body>
         <div id="root"></div>
-        <script type="module" src="/src/main.tsx"></script>
+        <script>
+            // Check backend status before loading React app
+            // If backend is not ready, redirect to loading page
+            (function() {
+                // Check if we're already on loading page
+                if (window.location.pathname === '/loading.html') {
+                    return; // Let loading.html handle it
+                }
+                
+                // Quick backend check before React app loads
+                fetch('/api/v1/user/status', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-cache'
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        // Backend not ready, redirect to loading page
+                        window.location.href = '/loading.html';
+                        return;
+                    }
+                    // Backend is ready, continue loading React app
+                    loadReactApp();
+                })
+                .catch(error => {
+                    // Backend not ready, redirect to loading page
+                    window.location.href = '/loading.html';
+                });
+                
+                function loadReactApp() {
+                    // Load React app normally
+                    const script = document.createElement('script');
+                    script.type = 'module';
+                    script.src = '/src/main.tsx';
+                    document.body.appendChild(script);
+                }
+            })();
+        </script>
     </body>
 </html>
