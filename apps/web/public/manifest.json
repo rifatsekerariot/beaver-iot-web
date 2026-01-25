@@ -1,7 +1,7 @@
 {
     "$schema": "https://json.schemastore.org/web-manifest-combined.json",
-    "name": "Beaver IoT Web",
-    "short_name": "BeaverIoT",
+    "name": "ARIOT",
+    "short_name": "ARIOT",
     "description": "An open-source platform designed for rapid and intuitive IoT application development.",
     "start_url": "/dashboard",
     "display": "standalone",
