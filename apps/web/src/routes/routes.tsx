@@ -10,6 +10,7 @@ import {
     SettingsIcon,
     SellIcon,
     AntFallAttentionIcon,
+    ListAltIcon,
 } from '@milesight/shared/src/components';
 import { PERMISSIONS } from '@/constants';
 import ErrorBoundaryComponent from './error-boundary';
@@ -250,6 +251,21 @@ const routes: RouteObjectType[] = [
         },
         async lazy() {
             const { default: Component } = await import('@/pages/setting');
+            return { Component };
+        },
+        ErrorBoundary,
+    },
+    {
+        path: '/report',
+        handle: {
+            get title() {
+                return intl.get('report.title');
+            },
+            icon: <ListAltIcon fontSize="small" />,
+            mobileAccessible: true,
+        },
+        async lazy() {
+            const { default: Component } = await import('@/pages/report');
             return { Component };
         },
         ErrorBoundary,

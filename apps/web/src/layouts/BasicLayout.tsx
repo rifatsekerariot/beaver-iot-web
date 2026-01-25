@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useRequest } from 'ahooks';
 import cls from 'classnames';
+import { isEmpty } from 'lodash-es';
 import { useI18n, useTheme, useStoreShallow } from '@milesight/shared/src/hooks';
 import {
     iotLocalStorage,
@@ -86,7 +87,7 @@ function BasicLayout() {
                     route.path &&
                     route.handle?.layout !== 'blank' &&
                     !route.handle?.hideInMenuBar &&
-                    hasPermission(route.handle?.permissions),
+                    (isEmpty(route.handle?.permissions) || hasPermission(route.handle?.permissions)),
             )
             .map(route => ({
                 name: route.handle?.title || '',
