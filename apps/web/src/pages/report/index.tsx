@@ -39,13 +39,14 @@ export default function ReportPage() {
     const [generating, setGenerating] = useState(false);
     const [dashboardName, setDashboardName] = useState<string>('');
 
-    const { control, handleSubmit, watch, getValues } = useForm<FormData>({ 
+    const { control, handleSubmit, watch, getValues, setValue } = useForm<FormData>({ 
         defaultValues: {
             dashboardId: undefined,
             reportTitle: '',
             companyName: '',
             dateRange: null,
         },
+        mode: 'onChange', // Validate on change for better UX
     });
     const dashboardId = watch('dashboardId');
     const dateRange = watch('dateRange');
@@ -363,7 +364,7 @@ export default function ReportPage() {
                 setGenerating(false);
             }
         },
-        [dashboardName, getIntlText, dayjs, getTimeFormat, getValues, dashboardId],
+        [dashboardName, getIntlText, dayjs, getTimeFormat, getValues, dashboardId, setValue],
     );
 
     return (
@@ -386,24 +387,35 @@ export default function ReportPage() {
                                     <Select
                                         labelId="dashboard-select-label"
                                         disabled={loadingDashboards || generating}
-                                        value={field.value != null ? String(field.value) : ''}
+                                        value={field.value != null && field.value !== '' ? String(field.value) : ''}
                                         onChange={(e: SelectChangeEvent<string>) => {
                                             const value = e.target.value;
-                                            console.log('Dashboard selected:', value, 'Type:', typeof value);
-                                            // Convert to ApiKey type (could be string or number)
-                                            // Don't set to undefined if value is empty, keep the previous value
+                                            console.log('Dashboard Select onChange - value:', value, 'Type:', typeof value);
+                                            
+                                            // Always call field.onChange to update form state
+                                            // Convert empty string to undefined for form state
                                             if (value === '' || value === 'undefined' || value === 'null') {
-                                                console.warn('Empty or invalid dashboard value selected, keeping previous value');
-                                                return;
+                                                console.log('Setting field value to undefined (empty selection)');
+                                                field.onChange(undefined);
+                                                // Also update via setValue to ensure form state is updated
+                                                setValue('dashboardId', undefined, { shouldValidate: true, shouldDirty: true });
+                                            } else {
+                                                // Try to convert to number if it's a numeric string
+                                                const trimmed = value.trim();
+                                                const numValue = Number(trimmed);
+                                                const apiKeyValue = (!isNaN(numValue) && trimmed !== '') ? numValue : trimmed;
+                                                console.log('Setting field value to:', apiKeyValue, 'Type:', typeof apiKeyValue);
+                                                field.onChange(apiKeyValue as ApiKey);
+                                                // Also update via setValue to ensure form state is updated
+                                                setValue('dashboardId', apiKeyValue as ApiKey, { shouldValidate: true, shouldDirty: true });
                                             }
-                                            const apiKeyValue = value as ApiKey;
-                                            console.log('Setting field value to:', apiKeyValue);
-                                            field.onChange(apiKeyValue);
-                                            // Force form state update
+                                            
+                                            // Verify form state update
                                             setTimeout(() => {
-                                                const updated = getValues('dashboardId');
-                                                console.log('Form state after onChange:', updated);
-                                            }, 0);
+                                                const currentValue = getValues('dashboardId');
+                                                const watchValue = watch('dashboardId');
+                                                console.log('Form state after onChange - getValues:', currentValue, 'watch:', watchValue, 'field.value:', field.value);
+                                            }, 100);
                                         }}
                                         onBlur={field.onBlur}
                                         name={field.name}
