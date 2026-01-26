@@ -39,7 +39,7 @@ export default function ReportPage() {
     const [generating, setGenerating] = useState(false);
     const [dashboardName, setDashboardName] = useState<string>('');
 
-    const { control, handleSubmit, watch } = useForm<FormData>({ 
+    const { control, handleSubmit, watch, getValues } = useForm<FormData>({ 
         defaultValues: {
             dashboardId: undefined,
             reportTitle: '',
@@ -93,7 +93,13 @@ export default function ReportPage() {
 
     const onGenerate: SubmitHandler<FormData> = useCallback(
         async ({ dashboardId: dbId, reportTitle, companyName, dateRange: dr }) => {
-            if (!dbId) {
+            // Get current form values to ensure we have the latest dashboardId
+            const currentValues = getValues();
+            const finalDashboardId = dbId || currentValues.dashboardId || dashboardId;
+            
+            console.log('Form submit - dbId:', dbId, 'currentValues.dashboardId:', currentValues.dashboardId, 'watch dashboardId:', dashboardId, 'finalDashboardId:', finalDashboardId);
+            
+            if (!finalDashboardId) {
                 toast.error(getIntlText('report.message.select_dashboard'));
                 return;
             }
@@ -106,9 +112,16 @@ export default function ReportPage() {
             setGenerating(true);
             try {
                 // 1. Get dashboard detail (entity_ids)
+                // Ensure id is converted to the correct type (number if needed)
+                const dashboardIdForApi = typeof finalDashboardId === 'string' && !isNaN(Number(finalDashboardId)) 
+                    ? Number(finalDashboardId) 
+                    : finalDashboardId;
+                
+                console.log('Calling getDashboardDetail with id:', dashboardIdForApi, 'type:', typeof dashboardIdForApi);
+                
                 const [err1, resp1] = await awaitWrap(
                     dashboardAPI.getDashboardDetail({
-                        id: dbId,
+                        id: dashboardIdForApi as ApiKey,
                     }),
                 );
                 if (err1 || !isRequestSuccess(resp1)) {
@@ -293,7 +306,7 @@ export default function ReportPage() {
                 setGenerating(false);
             }
         },
-        [dashboardName, getIntlText, dayjs, getTimeFormat],
+        [dashboardName, getIntlText, dayjs, getTimeFormat, getValues, dashboardId],
     );
 
     return (
