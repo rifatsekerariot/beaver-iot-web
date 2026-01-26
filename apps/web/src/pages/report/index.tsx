@@ -341,48 +341,48 @@ export default function ReportPage() {
                     }
                     const cap = 50;
                     const idsToQuery = deviceIds.slice(0, cap);
-                    console.log('[ReportPage] [API] Step 2b: Fetching entities by DEVICE_ID + ENTITY_TYPE (like Device Entity Data), devices:', idsToQuery.length);
+                    console.log('[ReportPage] [API] Step 2b: Fetching entities per device (DEVICE_ID EQ, like Device Entity Data), devices:', idsToQuery.length);
 
-                    const [err2, r2] = await awaitWrap(
-                        entityAPI.advancedSearch({
-                            page_size: 1000,
-                            page_number: 1,
-                            sorts: [{ direction: 'ASC' as const, property: 'key' }],
-                            entity_filter: {
-                                DEVICE_ID: { operator: 'ANY_EQUALS' as const, values: idsToQuery },
-                                ENTITY_TYPE: { operator: 'ANY_EQUALS' as const, values: [ENTITY_TYPE.PROPERTY] },
-                            },
-                        }),
-                    );
-                    if (err2 || !isRequestSuccess(r2)) {
-                        console.error('[ReportPage] [API] ❌ advancedSearch(DEVICE_ID) failed');
-                        const errorCode = (r2 as { data?: { error_code?: string } })?.data?.error_code;
-                        if (errorCode === 'authentication_failed') return;
-                        toast.error(getIntlText('report.message.failed_to_fetch_entities'));
-                        return;
+                    const allRaw: NormalizedEntity[] = [];
+                    for (const did of idsToQuery) {
+                        const [err2, r2] = await awaitWrap(
+                            entityAPI.advancedSearch({
+                                page_size: 1000,
+                                page_number: 1,
+                                sorts: [{ direction: 'ASC' as const, property: 'key' }],
+                                entity_filter: {
+                                    DEVICE_ID: { operator: 'EQ' as const, values: [did] },
+                                    ENTITY_TYPE: { operator: 'ANY_EQUALS' as const, values: [ENTITY_TYPE.PROPERTY] },
+                                },
+                            }),
+                        );
+                        if (err2 || !isRequestSuccess(r2)) {
+                            console.warn('[ReportPage] [API] advancedSearch(DEVICE_ID EQ) failed for device:', did, err2);
+                            continue;
+                        }
+                        const entityData = getResponseData(r2);
+                        const list = Array.isArray((entityData as any)?.content)
+                            ? (entityData as any).content
+                            : Array.isArray((entityData as any)?.data)
+                              ? (entityData as any).data
+                              : [];
+                        list.forEach((item: Record<string, unknown>) => {
+                            const id = (item.id ?? item.entity_id) as ApiKey | undefined;
+                            if (!id) return;
+                            const key = String(item.key ?? item.entity_key ?? '');
+                            const name = String(item.name ?? item.entity_name ?? '');
+                            const deviceId = (item.device_id as ApiKey | undefined) ?? (did as ApiKey);
+                            const va = (item.value_attribute ?? item.entity_value_attribute) as { unit?: string } | undefined;
+                            allRaw.push({ entityId: id, entityKey: key, entityName: name, deviceId, entityValueAttribute: va });
+                        });
                     }
-                    const entityData = getResponseData(r2);
-                    const list = Array.isArray((entityData as any)?.content)
-                        ? (entityData as any).content
-                        : Array.isArray((entityData as any)?.data)
-                          ? (entityData as any).data
-                          : [];
-                    const raw = list.map((item: Record<string, unknown>) => {
-                        const id = (item.id ?? item.entity_id) as ApiKey | undefined;
-                        if (!id) return null;
-                        const key = String(item.key ?? item.entity_key ?? '');
-                        const name = String(item.name ?? item.entity_name ?? '');
-                        const deviceId = (item.device_id as ApiKey | undefined) ?? undefined;
-                        const va = (item.value_attribute ?? item.entity_value_attribute) as { unit?: string } | undefined;
-                        return { entityId: id, entityKey: key, entityName: name, deviceId, entityValueAttribute: va };
-                    }).filter(Boolean) as NormalizedEntity[];
                     if (entityIdSet.size > 0) {
-                        entities = raw.filter(e => entityIdSet.has(String(e.entityId)));
-                        console.log('[ReportPage] [API]   - filtered by entity_ids:', entities.length, 'of', raw.length);
+                        entities = allRaw.filter(e => entityIdSet.has(String(e.entityId)));
+                        console.log('[ReportPage] [API]   - filtered by entity_ids:', entities.length, 'of', allRaw.length);
                     } else {
-                        entities = raw;
+                        entities = allRaw;
                     }
-                    console.log('[ReportPage] [API] ✅ entities fetched by DEVICE_ID, count:', entities.length);
+                    console.log('[ReportPage] [API] ✅ entities fetched by DEVICE_ID (EQ per device), count:', entities.length);
                 }
 
                 if (!entities.length) {
