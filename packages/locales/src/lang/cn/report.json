@@ -13,6 +13,7 @@
     "report.message.select_dashboard": "请选择仪表板。",
     "report.message.select_at_least_one": "请至少选择一个实体。",
     "report.message.select_date_range": "请选择日期范围。",
+    "report.message.invalid_date_range": "结束日期必须晚于开始日期。",
     "report.message.generate_failed": "生成 PDF 失败。",
     "report.message.dashboard_not_found": "未找到仪表板。",
     "report.message.no_entities_in_dashboard": "所选仪表板中未找到实体。",

@@ -13,6 +13,7 @@
     "report.message.select_dashboard": "Please select a dashboard.",
     "report.message.select_at_least_one": "Please select at least one entity.",
     "report.message.select_date_range": "Please select date range.",
+    "report.message.invalid_date_range": "End date must be after start date.",
     "report.message.generate_failed": "Failed to generate PDF.",
     "report.message.dashboard_not_found": "Dashboard not found.",
     "report.message.no_entities_in_dashboard": "No entities found in the selected dashboard.",

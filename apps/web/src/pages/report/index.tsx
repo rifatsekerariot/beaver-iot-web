@@ -159,7 +159,18 @@ export default function ReportPage() {
                 toast.error(getIntlText('report.message.select_date_range'));
                 return;
             }
-            console.log('[ReportPage] [FORM] ✅ Date range validation passed');
+            if (end <= start) {
+                console.error('[ReportPage] [FORM] ❌ End date must be after start date');
+                toast.error(getIntlText('report.message.invalid_date_range'));
+                return;
+            }
+            let startMs = start;
+            let endMs = end;
+            if (dr?.end && dr.end.hour() === 0 && dr.end.minute() === 0 && dr.end.second() === 0 && dr.end.millisecond() === 0) {
+                endMs = dayjs(dr.end).endOf('day').valueOf();
+                console.log('[ReportPage] [FORM] End date at start-of-day, extended to end-of-day:', endMs);
+            }
+            console.log('[ReportPage] [FORM] ✅ Date range validation passed (startMs, endMs sent to API)');
             
             console.log('[ReportPage] [FORM] Setting generating=true');
             setGenerating(true);
@@ -485,7 +496,7 @@ export default function ReportPage() {
                 // 6. Fetch aggregate data for each entity
                 console.log('[ReportPage] [API] Step 6: Fetching aggregate data for entities...');
                 console.log('[ReportPage] [API]   - deviceGroups count:', deviceGroups.length);
-                console.log('[ReportPage] [API]   - Date range: start:', start, 'end:', end);
+                console.log('[ReportPage] [API]   - Date range (ms, sent to API): start:', startMs, 'end:', endMs);
                 
                 const deviceSections: PdfReportDeviceSection[] = [];
                 for (const group of deviceGroups) {
@@ -499,8 +510,8 @@ export default function ReportPage() {
                             const [err, resp] = await awaitWrap(
                                 entityAPI.getAggregateHistory({
                                     entity_id: entity.entityId,
-                                    start_timestamp: start,
-                                    end_timestamp: end,
+                                    start_timestamp: startMs,
+                                    end_timestamp: endMs,
                                     aggregate_type: t,
                                 }),
                             );
@@ -564,7 +575,7 @@ export default function ReportPage() {
 
                 // 7. Generate PDF
                 console.log('[ReportPage] [PDF] Step 7: Generating PDF...');
-                const dateRangeStr = `${getTimeFormat(dayjs(start), 'simpleDateFormat')} – ${getTimeFormat(dayjs(end), 'simpleDateFormat')}`;
+                const dateRangeStr = `${getTimeFormat(dayjs(startMs), 'simpleDateFormat')} – ${getTimeFormat(dayjs(endMs), 'simpleDateFormat')}`;
                 const generatedAt = getTimeFormat(dayjs(), 'fullDateTimeSecondFormat');
                 console.log('[ReportPage] [PDF]   - dateRangeStr:', dateRangeStr);
                 console.log('[ReportPage] [PDF]   - generatedAt:', generatedAt);
