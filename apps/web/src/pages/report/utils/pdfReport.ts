@@ -1,6 +1,11 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+export interface PdfReportHistoryPoint {
+    timestamp: string;
+    value: string;
+}
+
 export interface PdfReportRow {
     entityName: string;
     unit: string;
@@ -8,6 +13,8 @@ export interface PdfReportRow {
     min: number | string;
     max: number | string;
     avg: number | string;
+    /** Timestamped telemetry list in date range (timestamp formatted, value as string) */
+    history?: PdfReportHistoryPoint[];
 }
 
 export interface PdfReportDeviceSection {
@@ -27,7 +34,16 @@ export interface PdfReportOptions {
     ariotLabel: string;
     dashboardLabel: string;
     deviceLabel: string;
-    tableHeaders: { entityName: string; unit: string; last: string; min: string; max: string; avg: string };
+    tableHeaders: {
+        entityName: string;
+        unit: string;
+        last: string;
+        min: string;
+        max: string;
+        avg: string;
+        timestamp?: string;
+        value?: string;
+    };
 }
 
 const fmt = (v: number | string): string =>
@@ -84,6 +100,9 @@ export function buildTelemetryPdf(options: PdfReportOptions): Blob {
     doc.text(dateRange, 14, y);
     y += 8;
 
+    const timestampHeader = (tableHeaders as { timestamp?: string }).timestamp ?? 'Timestamp';
+    const valueHeader = (tableHeaders as { value?: string }).value ?? 'Value';
+
     // Device sections
     if (deviceSections.length > 0) {
         for (let i = 0; i < deviceSections.length; i++) {
@@ -97,7 +116,7 @@ export function buildTelemetryPdf(options: PdfReportOptions): Blob {
             doc.text(deviceHeaderText, 14, y);
             y += 6;
 
-            // Table for this device
+            // Summary table for this device
             autoTable(doc, {
                 startY: y,
                 head: [
@@ -122,8 +141,29 @@ export function buildTelemetryPdf(options: PdfReportOptions): Blob {
                 headStyles: { fillColor: [66, 139, 202], textColor: 255 },
                 margin: { left: 14, right: 14 },
             });
-            const tbl = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable;
+            let tbl = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable;
             y = tbl?.finalY ?? y + 10;
+
+            // Per-entity history tables (timestamp | value)
+            for (const r of section.rows) {
+                const hist = r.history;
+                if (!hist || hist.length === 0) continue;
+                y += 4;
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`${r.entityName} (${r.unit || '—'}) – ${hist.length}`, 14, y);
+                y += 5;
+                autoTable(doc, {
+                    startY: y,
+                    head: [[timestampHeader, valueHeader]],
+                    body: hist.map(h => [h.timestamp, h.value]),
+                    theme: 'grid',
+                    headStyles: { fillColor: [100, 100, 100], textColor: 255 },
+                    margin: { left: 14, right: 14 },
+                });
+                tbl = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable;
+                y = tbl?.finalY ?? y + 10;
+            }
 
             // Add spacing between device sections (except last)
             if (i < deviceSections.length - 1) {

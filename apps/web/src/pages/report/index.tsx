@@ -312,6 +312,7 @@ export default function ReportPage() {
                     if (Array.isArray(o.entities)) o.entities.forEach((e: unknown) => scan(e));
                     if (Array.isArray(o.entityList)) o.entityList.forEach((e: unknown) => scan(e));
                     if (o.data && typeof o.data === 'object') scan(o.data);
+                    if (o.config && typeof o.config === 'object') scan(o.config);
                 };
                 widgets.forEach(w => scan(w.data));
 
@@ -508,55 +509,58 @@ export default function ReportPage() {
                     })),
                 }));
 
-                // 6. Fetch aggregate data for each entity
-                console.log('[ReportPage] [API] Step 6: Fetching aggregate data for entities...');
+                // 6. Fetch history (timestamped list) per entity; compute last/min/max/avg from it
+                const HISTORY_PAGE_SIZE = 500;
+                const MAX_HISTORY_PAGES = 20;
+                console.log('[ReportPage] [API] Step 6: Fetching entity history (timestamped) for report...');
                 console.log('[ReportPage] [API]   - deviceGroups count:', deviceGroups.length);
-                console.log('[ReportPage] [API]   - Date range (ms, sent to API): start:', startMs, 'end:', endMs);
-                
+                console.log('[ReportPage] [API]   - Date range (ms): start:', startMs, 'end:', endMs);
+
                 const deviceSections: PdfReportDeviceSection[] = [];
                 for (const group of deviceGroups) {
                     console.log('[ReportPage] [API]   - Processing device:', group.deviceName, 'entities:', group.entities.length);
                     const rows: PdfReportRow[] = [];
                     for (const entity of group.entities) {
-                        console.log('[ReportPage] [API]     - Fetching aggregate for entity:', entity.entityName, 'id:', entity.entityId);
-                        
-                        const agg = async (t: 'LAST' | 'MIN' | 'MAX' | 'AVG') => {
-                            console.log('[ReportPage] [API]       - Calling getAggregateHistory:', t, 'entity_id:', entity.entityId);
+                        const allPoints: { timestamp: number; value: number }[] = [];
+                        const rawHistory: { timestamp: number; value: unknown }[] = [];
+                        let page = 1;
+                        let hasMore = true;
+                        while (hasMore && page <= MAX_HISTORY_PAGES) {
                             const [err, resp] = await awaitWrap(
-                                entityAPI.getAggregateHistory({
+                                entityAPI.getHistory({
                                     entity_id: entity.entityId,
                                     start_timestamp: startMs,
                                     end_timestamp: endMs,
-                                    aggregate_type: t,
+                                    page_size: HISTORY_PAGE_SIZE,
+                                    page_number: page,
                                 }),
                             );
-                            
-                            console.log('[ReportPage] [API]       - getAggregateHistory response:', t, 'error:', err, 'isRequestSuccess:', resp ? isRequestSuccess(resp) : false);
-                            
-                            // Check if it's an authentication error
-                            if (resp && !isRequestSuccess(resp)) {
-                                const errorCode = (resp?.data as ApiResponse)?.error_code;
-                                console.log('[ReportPage] [API]       - error_code:', errorCode);
-                                if (errorCode === 'authentication_failed') {
-                                    console.log('[ReportPage] [API]       - Authentication failed, redirecting to login...');
-                                    // Error handler will redirect to login
-                                    return NaN;
-                                }
+                            if (err || !isRequestSuccess(resp)) {
+                                if (resp && (resp?.data as ApiResponse)?.error_code === 'authentication_failed') return;
+                                break;
                             }
-                            const d = !err && isRequestSuccess(resp) ? getResponseData(resp) : null;
-                            const value = d?.value != null ? (typeof d.value === 'number' ? d.value : Number(d.value)) : NaN;
-                            console.log('[ReportPage] [API]       - getAggregateHistory result:', t, 'value:', value);
-                            return value;
-                        };
-
-                        const [last, min, max, avg] = await Promise.all([
-                            agg('LAST'),
-                            agg('MIN'),
-                            agg('MAX'),
-                            agg('AVG'),
-                        ]);
-
-                        console.log('[ReportPage] [API]     - Aggregate values for', entity.entityName, ':', { last, min, max, avg });
+                            const data = getResponseData(resp) as { content?: Array<{ timestamp?: number; value?: unknown }>; total?: number } | null;
+                            const content = data?.content ?? [];
+                            content.forEach((item: { timestamp?: number; value?: unknown }) => {
+                                const ts = item.timestamp;
+                                const v = item.value;
+                                if (ts == null) return;
+                                if (v != null && v !== '') rawHistory.push({ timestamp: ts, value: v });
+                                const n = typeof v === 'number' && !Number.isNaN(v) ? v : Number(v);
+                                if (!Number.isNaN(n)) allPoints.push({ timestamp: ts, value: n });
+                            });
+                            hasMore = content.length >= HISTORY_PAGE_SIZE;
+                            page += 1;
+                        }
+                        const nums = allPoints.map(p => p.value);
+                        const last = allPoints.length > 0 ? allPoints[allPoints.length - 1].value : NaN;
+                        const min = nums.length ? Math.min(...nums) : NaN;
+                        const max = nums.length ? Math.max(...nums) : NaN;
+                        const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : NaN;
+                        const history = rawHistory.map(p => ({
+                            timestamp: getTimeFormat(dayjs(p.timestamp), 'fullDateTimeSecondFormat'),
+                            value: p.value != null && p.value !== '' ? String(p.value) : '—',
+                        }));
 
                         rows.push({
                             entityName: entity.entityName,
@@ -565,20 +569,16 @@ export default function ReportPage() {
                             min,
                             max,
                             avg,
+                            history,
                         });
+                        console.log('[ReportPage] [API]     -', entity.entityName, 'history points:', rawHistory.length, 'last/min/max/avg:', { last, min, max, avg });
                     }
                     if (rows.length > 0) {
-                        console.log('[ReportPage] [API]   - ✅ Added', rows.length, 'rows for device:', group.deviceName);
-                        deviceSections.push({
-                            deviceName: group.deviceName,
-                            rows,
-                        });
-                    } else {
-                        console.log('[ReportPage] [API]   - ⚠️ No rows for device:', group.deviceName);
+                        deviceSections.push({ deviceName: group.deviceName, rows });
                     }
                 }
                 
-                console.log('[ReportPage] [API] ✅ Aggregate data fetch completed');
+                console.log('[ReportPage] [API] ✅ Entity history fetch completed');
                 console.log('[ReportPage] [API]   - deviceSections count:', deviceSections.length);
 
                 if (deviceSections.length === 0) {
@@ -618,6 +618,8 @@ export default function ReportPage() {
                         min: getIntlText('report.table.min'),
                         max: getIntlText('report.table.max'),
                         avg: getIntlText('report.table.avg'),
+                        timestamp: getIntlText('report.table.timestamp'),
+                        value: getIntlText('report.table.value'),
                     },
                 });
 
