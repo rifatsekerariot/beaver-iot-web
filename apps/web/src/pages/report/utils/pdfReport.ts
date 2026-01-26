@@ -53,6 +53,10 @@ export function buildTelemetryPdf(options: PdfReportOptions): Blob {
         tableHeaders,
     } = options;
     const reportTitle = title?.trim() || defaultTitle;
+    const deviceLabelText: string = (deviceLabel ?? 'Device') as string;
+    const dashboardLabelText: string = (dashboardLabel ?? 'Dashboard') as string;
+    const generatedAtLabelText: string = (generatedAtLabel ?? 'Generated at') as string;
+    const ariotLabelText: string = (ariotLabel ?? 'ARIOT') as string;
     let y = 16;
 
     // Report title
@@ -70,7 +74,8 @@ export function buildTelemetryPdf(options: PdfReportOptions): Blob {
     // Dashboard name
     if (dashboardName?.trim()) {
         doc.setFontSize(11);
-        doc.text(`${dashboardLabel}: ${dashboardName.trim()}`, 14, y);
+        const dashboardText = `${dashboardLabelText}: ${dashboardName.trim()}`;
+        doc.text(dashboardText, 14, y);
         y += 6;
     }
 
@@ -87,8 +92,9 @@ export function buildTelemetryPdf(options: PdfReportOptions): Blob {
 
             // Device name header
             doc.setFontSize(12);
-            doc.setFont(undefined, 'bold');
-            doc.text(`${deviceLabel}: ${section.deviceName}`, 14, y);
+            doc.setFont('helvetica', 'bold');
+            const deviceHeaderText = `${deviceLabelText}: ${section.deviceName}`;
+            doc.text(deviceHeaderText, 14, y);
             y += 6;
 
             // Table for this device
@@ -128,10 +134,11 @@ export function buildTelemetryPdf(options: PdfReportOptions): Blob {
 
     y += 10;
     doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
-    doc.text(`${generatedAtLabel} ${generatedAt}`, 14, y);
+    doc.setFont('helvetica', 'normal');
+    const generatedAtText = `${generatedAtLabelText} ${generatedAt}`;
+    doc.text(generatedAtText, 14, y);
     y += 5;
-    doc.text(ariotLabel, 14, y);
+    doc.text(ariotLabelText, 14, y);
 
     return doc.output('blob');
 }

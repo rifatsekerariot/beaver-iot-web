@@ -57,7 +57,7 @@ export default function ReportPage() {
             );
             const data = getResponseData(resp);
             if (error || !data || !isRequestSuccess(resp)) return;
-            return objectToCamelCase(data) as DashboardListProps[];
+            return (objectToCamelCase(data) as unknown) as DashboardListProps[];
         },
         { debounceWait: 300 },
     );
@@ -96,8 +96,8 @@ export default function ReportPage() {
                     toast.error(getIntlText('report.message.dashboard_not_found'));
                     return;
                 }
-                const dashboardDetail = getResponseData(resp1);
-                const entityIds = dashboardDetail?.entityIds ?? [];
+                const dashboardDetail = getResponseData(resp1) as { entity_ids?: ApiKey[]; name?: string } | null;
+                const entityIds = dashboardDetail?.entity_ids ?? [];
                 if (!entityIds.length) {
                     toast.error(getIntlText('report.message.no_entities_in_dashboard'));
                     return;
@@ -110,7 +110,7 @@ export default function ReportPage() {
                         page_number: 1,
                         sorts: [{ direction: 'ASC' as const, property: 'key' }],
                         entity_filter: {
-                            ID: { operator: 'ANY_EQUALS' as const, values: entityIds },
+                            ENTITY_ID: { operator: 'ANY_EQUALS' as const, values: entityIds },
                             ENTITY_TYPE: { operator: 'ANY_EQUALS' as const, values: [ENTITY_TYPE.PROPERTY] },
                         },
                     }),
@@ -120,13 +120,18 @@ export default function ReportPage() {
                     return;
                 }
                 const entityData = getResponseData(resp2);
-                const entities = (objectToCamelCase(entityData)?.content ?? []) as Array<{
-                    id: ApiKey;
-                    key: string;
-                    name: string;
+                if (!entityData || typeof entityData !== 'object') {
+                    toast.error(getIntlText('report.message.failed_to_fetch_entities'));
+                    return;
+                }
+                const entityDataCamel = objectToCamelCase(entityData) as { content?: Array<{
+                    entityId: ApiKey;
+                    entityKey: string;
+                    entityName: string;
                     deviceId?: ApiKey;
-                    valueAttribute?: { unit?: string };
-                }>;
+                    entityValueAttribute?: { unit?: string };
+                }> } | null;
+                const entities = entityDataCamel?.content ?? [];
 
                 // 3. Group entities by device_id and get unique device_ids
                 const deviceIdSet = new Set<ApiKey>();
@@ -161,10 +166,15 @@ export default function ReportPage() {
                     return;
                 }
                 const deviceData = getResponseData(resp3);
-                const devices = (objectToCamelCase(deviceData)?.content ?? []) as Array<{
+                if (!deviceData || typeof deviceData !== 'object') {
+                    toast.error(getIntlText('report.message.failed_to_fetch_devices'));
+                    return;
+                }
+                const deviceDataCamel = objectToCamelCase(deviceData) as { content?: Array<{
                     id: ApiKey;
                     name: string;
-                }>;
+                }> } | null;
+                const devices = deviceDataCamel?.content ?? [];
                 const deviceNameMap = new Map<ApiKey, string>();
                 devices.forEach(device => {
                     deviceNameMap.set(device.id, device.name);
@@ -175,10 +185,10 @@ export default function ReportPage() {
                     deviceId,
                     deviceName: deviceNameMap.get(deviceId) ?? `Device ${deviceId}`,
                     entities: (entityMap.get(deviceId) ?? []).map(entity => ({
-                        entityId: entity.id,
-                        entityName: entity.name,
-                        entityKey: entity.key,
-                        unit: entity.valueAttribute?.unit,
+                        entityId: entity.entityId,
+                        entityName: entity.entityName,
+                        entityKey: entity.entityKey,
+                        unit: entity.entityValueAttribute?.unit,
                     })),
                 }));
 
@@ -235,7 +245,7 @@ export default function ReportPage() {
                 const blob = buildTelemetryPdf({
                     title: reportTitle ?? '',
                     companyName: companyName ?? '',
-                    dashboardName: dashboardName || dashboardDetail?.name || '',
+                    dashboardName: dashboardName || (dashboardDetail as { name?: string } | null)?.name || '',
                     dateRange: dateRangeStr,
                     deviceSections,
                     generatedAt,
