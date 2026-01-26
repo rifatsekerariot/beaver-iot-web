@@ -499,7 +499,7 @@ export default function ReportPage() {
                 const blob = buildTelemetryPdf({
                     title: reportTitle ?? '',
                     companyName: companyName ?? '',
-                    dashboardName: dashboardName || (dashboardDetail as { name?: string } | null)?.name || '',
+                    dashboardName: dashboardName || (canvasDetail as { name?: string } | null)?.name || '',
                     dateRange: dateRangeStr,
                     deviceSections,
                     generatedAt,
