@@ -73,21 +73,36 @@ export default function ReportPage() {
 
     // Fetch dashboard list on mount
     useEffect(() => {
+        console.log('[ReportPage] Component mounted, fetching dashboards...');
         fetchDashboards();
     }, [fetchDashboards]);
+    
+    // Debug: Log dashboard list when it changes
+    useEffect(() => {
+        if (dashboardList) {
+            console.log('[ReportPage] Dashboard list updated:', dashboardList.length, 'dashboards:', dashboardList.map(d => ({ id: (d as any).dashboard_id, name: d.name })));
+        }
+    }, [dashboardList]);
 
     // Fetch dashboard detail when dashboard is selected
     useEffect(() => {
-        if (dashboardId != null) {
+        console.log('[ReportPage] dashboardId changed:', dashboardId, 'Type:', typeof dashboardId);
+        if (dashboardId != null && dashboardId !== '' && dashboardId !== 'undefined') {
             // Compare as strings since we convert to string in Select
             const selected = dashboardList?.find(d => {
                 const dId = (d as any).dashboard_id;
-                return String(dId) === String(dashboardId) || dId === dashboardId;
+                const match = String(dId) === String(dashboardId) || dId === dashboardId;
+                if (match) {
+                    console.log('[ReportPage] Found matching dashboard:', { dId, dashboardId, name: d.name });
+                }
+                return match;
             });
-            setDashboardName(selected?.name ?? '');
-            console.log('Dashboard name updated:', selected?.name);
+            const name = selected?.name ?? '';
+            setDashboardName(name);
+            console.log('[ReportPage] Dashboard name updated:', name);
         } else {
             setDashboardName('');
+            console.log('[ReportPage] Dashboard ID is null/empty, clearing dashboard name');
         }
     }, [dashboardId, dashboardList]);
 
