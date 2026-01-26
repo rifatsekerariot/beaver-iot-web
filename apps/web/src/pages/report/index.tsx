@@ -204,42 +204,51 @@ export default function ReportPage() {
                 }
                 console.log('[ReportPage] [API] ✅ Dashboard ID for API:', dashboardIdForApi, 'Type:', typeof dashboardIdForApi);
                 
-                console.log('[ReportPage] [API] Step 1.1: Calling getDashboardDetail API...');
-                console.log('[ReportPage] [API]   - Request: { id:', dashboardIdForApi, '}');
+                // Use getDrawingBoardDetail(canvas_id) instead of getDashboardDetail(id).
+                // GET /dashboard/:id returns 500 (backend "GET not supported"); GET /canvas/:canvas_id works.
+                const selectedDashboard = dashboardList?.find(
+                    d => String(d.dashboard_id) === String(dashboardIdForApi) || d.dashboard_id === dashboardIdForApi,
+                );
+                const mainCanvasId = selectedDashboard?.main_canvas_id;
+                if (!mainCanvasId && mainCanvasId !== 0) {
+                    console.error('[ReportPage] [API] ❌ main_canvas_id not found for dashboard:', dashboardIdForApi);
+                    toast.error(getIntlText('report.message.dashboard_not_found'));
+                    return;
+                }
+                console.log('[ReportPage] [API] Step 1.1: Calling getDrawingBoardDetail (GET /canvas/:id)...');
+                console.log('[ReportPage] [API]   - canvas_id:', mainCanvasId);
                 
                 const [err1, resp1] = await awaitWrap(
-                    dashboardAPI.getDashboardDetail({
-                        id: dashboardIdForApi as ApiKey,
+                    dashboardAPI.getDrawingBoardDetail({
+                        canvas_id: mainCanvasId as ApiKey,
                     }),
                 );
                 
-                console.log('[ReportPage] [API] Step 1.2: getDashboardDetail response received');
+                console.log('[ReportPage] [API] Step 1.2: getDrawingBoardDetail response received');
                 console.log('[ReportPage] [API]   - error:', err1);
                 console.log('[ReportPage] [API]   - response:', resp1);
                 console.log('[ReportPage] [API]   - isRequestSuccess:', isRequestSuccess(resp1));
                 
                 if (err1 || !isRequestSuccess(resp1)) {
-                    console.error('[ReportPage] [API] ❌ getDashboardDetail failed');
+                    console.error('[ReportPage] [API] ❌ getDrawingBoardDetail failed');
                     console.error('[ReportPage] [API]   - error:', err1);
                     console.error('[ReportPage] [API]   - response:', resp1);
                     
-                    // Check if it's an authentication error
                     const errorCode = (resp1?.data as ApiResponse)?.error_code;
                     console.log('[ReportPage] [API]   - error_code:', errorCode);
                     if (errorCode === 'authentication_failed') {
                         console.log('[ReportPage] [API]   - Authentication failed, redirecting to login...');
-                        // Error handler will redirect to login, just return
                         return;
                     }
                     toast.error(getIntlText('report.message.dashboard_not_found'));
                     return;
                 }
                 
-                const dashboardDetail = getResponseData(resp1) as { entity_ids?: ApiKey[]; name?: string } | null;
-                console.log('[ReportPage] [API] ✅ getDashboardDetail success');
-                console.log('[ReportPage] [API]   - dashboardDetail:', dashboardDetail);
+                const canvasDetail = getResponseData(resp1) as { entity_ids?: ApiKey[]; name?: string } | null;
+                console.log('[ReportPage] [API] ✅ getDrawingBoardDetail success');
+                console.log('[ReportPage] [API]   - canvasDetail:', canvasDetail);
                 
-                const entityIds = dashboardDetail?.entity_ids ?? [];
+                const entityIds = canvasDetail?.entity_ids ?? [];
                 console.log('[ReportPage] [API]   - entity_ids:', entityIds, 'count:', entityIds.length);
                 
                 if (!entityIds.length) {
