@@ -92,19 +92,22 @@ export default function ReportPage() {
     }, [dashboardId, dashboardList]);
 
     const onGenerate: SubmitHandler<FormData> = useCallback(
-        async ({ dashboardId: dbId, reportTitle, companyName, dateRange: dr }) => {
+        async (formData) => {
             // Get current form values to ensure we have the latest dashboardId
             const currentValues = getValues();
-            const finalDashboardId = dbId || currentValues.dashboardId || dashboardId;
+            // Try multiple sources: formData, currentValues, watch value
+            const dbId = formData.dashboardId || currentValues.dashboardId || dashboardId;
             
-            console.log('Form submit - dbId:', dbId, 'currentValues.dashboardId:', currentValues.dashboardId, 'watch dashboardId:', dashboardId, 'finalDashboardId:', finalDashboardId);
+            console.log('Form submit - formData.dashboardId:', formData.dashboardId, 'currentValues.dashboardId:', currentValues.dashboardId, 'watch dashboardId:', dashboardId, 'final dbId:', dbId);
             
             // Validate dashboardId is not undefined, null, or empty string
-            if (!finalDashboardId || finalDashboardId === '' || finalDashboardId === 'undefined' || finalDashboardId === 'null') {
-                console.error('Dashboard ID is invalid:', finalDashboardId);
+            if (!dbId || dbId === '' || dbId === 'undefined' || dbId === 'null' || String(dbId).trim() === '') {
+                console.error('Dashboard ID is invalid:', dbId, 'formData:', formData, 'currentValues:', currentValues);
                 toast.error(getIntlText('report.message.select_dashboard'));
                 return;
             }
+            
+            const { reportTitle, companyName, dateRange: dr } = formData;
             
             const start = dr?.start?.valueOf();
             const end = dr?.end?.valueOf();
@@ -117,21 +120,31 @@ export default function ReportPage() {
                 // 1. Get dashboard detail (entity_ids)
                 // Ensure id is converted to the correct type (number if needed)
                 let dashboardIdForApi: ApiKey;
-                if (typeof finalDashboardId === 'string') {
+                if (typeof dbId === 'string') {
                     // Check if it's a valid number string
-                    const numValue = Number(finalDashboardId);
-                    if (!isNaN(numValue) && finalDashboardId.trim() !== '') {
+                    const trimmed = dbId.trim();
+                    if (trimmed === '' || trimmed === 'undefined' || trimmed === 'null') {
+                        console.error('Dashboard ID is invalid string:', dbId);
+                        toast.error(getIntlText('report.message.select_dashboard'));
+                        return;
+                    }
+                    const numValue = Number(trimmed);
+                    if (!isNaN(numValue) && trimmed !== '') {
                         dashboardIdForApi = numValue;
                     } else {
                         // Keep as string if not a valid number
-                        dashboardIdForApi = finalDashboardId;
+                        dashboardIdForApi = trimmed;
                     }
+                } else if (typeof dbId === 'number') {
+                    dashboardIdForApi = dbId;
                 } else {
-                    dashboardIdForApi = finalDashboardId;
+                    console.error('Dashboard ID has invalid type:', typeof dbId, dbId);
+                    toast.error(getIntlText('report.message.select_dashboard'));
+                    return;
                 }
                 
                 // Final validation before API call
-                if (!dashboardIdForApi || dashboardIdForApi === 'undefined' || dashboardIdForApi === 'null') {
+                if (dashboardIdForApi == null || dashboardIdForApi === '' || String(dashboardIdForApi).trim() === '') {
                     console.error('Dashboard ID is invalid after conversion:', dashboardIdForApi);
                     toast.error(getIntlText('report.message.select_dashboard'));
                     return;
@@ -378,9 +391,19 @@ export default function ReportPage() {
                                             const value = e.target.value;
                                             console.log('Dashboard selected:', value, 'Type:', typeof value);
                                             // Convert to ApiKey type (could be string or number)
-                                            const apiKeyValue = value === '' ? undefined : (value as ApiKey);
+                                            // Don't set to undefined if value is empty, keep the previous value
+                                            if (value === '' || value === 'undefined' || value === 'null') {
+                                                console.warn('Empty or invalid dashboard value selected, keeping previous value');
+                                                return;
+                                            }
+                                            const apiKeyValue = value as ApiKey;
                                             console.log('Setting field value to:', apiKeyValue);
                                             field.onChange(apiKeyValue);
+                                            // Force form state update
+                                            setTimeout(() => {
+                                                const updated = getValues('dashboardId');
+                                                console.log('Form state after onChange:', updated);
+                                            }, 0);
                                         }}
                                         onBlur={field.onBlur}
                                         name={field.name}
