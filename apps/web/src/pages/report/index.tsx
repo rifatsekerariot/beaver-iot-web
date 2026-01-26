@@ -270,18 +270,18 @@ export default function ReportPage() {
 
                 let idsToSearch = entityIds;
                 if (rawEntities.length > 0) {
-                    const mapped: NormalizedEntity[] = rawEntities
-                        .map((e: Record<string, unknown>) => {
+                    const mapped: NormalizedEntity[] = rawEntities.flatMap(
+                        (e: Record<string, unknown>): NormalizedEntity[] => {
                             const id = (e.id ?? e.entity_id) as ApiKey | undefined;
+                            if (!id) return [];
                             const key = String(e.key ?? e.entity_key ?? '');
                             const name = String(e.name ?? e.entity_name ?? '');
                             const deviceId = (e.device_id as ApiKey | undefined) ?? undefined;
                             const va = (e.value_attribute ?? e.entity_value_attribute) as { unit?: string } | undefined;
-                            if (!id) return null;
-                            return { entityId: id, entityKey: key, entityName: name, deviceId, entityValueAttribute: va };
-                        })
-                        .filter((e): e is NormalizedEntity => !!e);
-                    const withDevice = mapped.filter(e => e.deviceId != null);
+                            return [{ entityId: id, entityKey: key, entityName: name, deviceId, entityValueAttribute: va }];
+                        },
+                    );
+                    const withDevice = mapped.filter((e): e is NormalizedEntity & { deviceId: ApiKey } => e.deviceId != null);
                     if (withDevice.length > 0) {
                         console.log('[ReportPage] [API] Using canvas.entities (skip advanced-search), count:', withDevice.length);
                         entities = withDevice;
