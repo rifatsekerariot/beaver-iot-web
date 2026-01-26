@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useForm, Controller, type SubmitHandler } from 'react-hook-form';
 import { Box, Button, FormControl, Stack, TextField, Select, MenuItem, InputLabel, FormHelperText } from '@mui/material';
 import { useRequest } from 'ahooks';
@@ -59,8 +59,15 @@ export default function ReportPage() {
             if (error || !data || !isRequestSuccess(resp)) return;
             return (objectToCamelCase(data) as unknown) as DashboardListProps[];
         },
-        { debounceWait: 300 },
+        { 
+            manual: true,
+        },
     );
+
+    // Fetch dashboard list on mount
+    useEffect(() => {
+        fetchDashboards();
+    }, [fetchDashboards]);
 
     // Fetch dashboard detail when dashboard is selected
     useEffect(() => {
@@ -298,6 +305,10 @@ export default function ReportPage() {
                                         {...field}
                                         label={getIntlText('report.form.dashboard')}
                                         disabled={loadingDashboards || generating}
+                                        onChange={(e) => {
+                                            field.onChange(e.target.value);
+                                        }}
+                                        value={field.value || ''}
                                     >
                                         {dashboardList?.map(dashboard => (
                                             <MenuItem key={(dashboard as any).dashboard_id} value={(dashboard as any).dashboard_id}>
