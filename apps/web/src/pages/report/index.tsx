@@ -125,6 +125,12 @@ export default function ReportPage() {
                     }),
                 );
                 if (err1 || !isRequestSuccess(resp1)) {
+                    // Check if it's an authentication error
+                    const errorCode = (resp1?.data as ApiResponse)?.error_code;
+                    if (errorCode === 'authentication_failed') {
+                        // Error handler will redirect to login, just return
+                        return;
+                    }
                     toast.error(getIntlText('report.message.dashboard_not_found'));
                     return;
                 }
@@ -148,6 +154,11 @@ export default function ReportPage() {
                     }),
                 );
                 if (err2 || !isRequestSuccess(resp2)) {
+                    // Check if it's an authentication error
+                    const errorCode = (resp2?.data as ApiResponse)?.error_code;
+                    if (errorCode === 'authentication_failed') {
+                        return;
+                    }
                     toast.error(getIntlText('report.message.failed_to_fetch_entities'));
                     return;
                 }
@@ -194,6 +205,11 @@ export default function ReportPage() {
                     }),
                 );
                 if (err3 || !isRequestSuccess(resp3)) {
+                    // Check if it's an authentication error
+                    const errorCode = (resp3?.data as ApiResponse)?.error_code;
+                    if (errorCode === 'authentication_failed') {
+                        return;
+                    }
                     toast.error(getIntlText('report.message.failed_to_fetch_devices'));
                     return;
                 }
@@ -238,6 +254,14 @@ export default function ReportPage() {
                                     aggregate_type: t,
                                 }),
                             );
+                            // Check if it's an authentication error
+                            if (resp && !isRequestSuccess(resp)) {
+                                const errorCode = (resp?.data as ApiResponse)?.error_code;
+                                if (errorCode === 'authentication_failed') {
+                                    // Error handler will redirect to login
+                                    return NaN;
+                                }
+                            }
                             const d = !err && isRequestSuccess(resp) ? getResponseData(resp) : null;
                             return d?.value != null ? (typeof d.value === 'number' ? d.value : Number(d.value)) : NaN;
                         };
