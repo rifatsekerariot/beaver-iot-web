@@ -20,6 +20,7 @@
     "report.message.no_data_in_range": "所选日期范围内没有数据。",
     "report.message.failed_to_fetch_entities": "获取实体失败。",
     "report.message.failed_to_fetch_devices": "获取设备失败。",
+    "report.message.no_dashboards": "没有可用的仪表板。",
     "report.table.entity_name": "实体",
     "report.table.unit": "单位",
     "report.table.last": "最近",

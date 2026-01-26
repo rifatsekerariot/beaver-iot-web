@@ -300,21 +300,34 @@ export default function ReportPage() {
                             rules={{ required: true }}
                             render={({ field, fieldState: { error } }) => (
                                 <FormControl size="small" sx={{ minWidth: 280 }} error={!!error} required>
-                                    <InputLabel>{getIntlText('report.form.dashboard')}</InputLabel>
+                                    <InputLabel id="dashboard-select-label">{getIntlText('report.form.dashboard')}</InputLabel>
                                     <Select
-                                        {...field}
-                                        label={getIntlText('report.form.dashboard')}
+                                        labelId="dashboard-select-label"
                                         disabled={loadingDashboards || generating}
+                                        value={field.value ?? ''}
                                         onChange={(e) => {
-                                            field.onChange(e.target.value);
+                                            const value = e.target.value;
+                                            console.log('Dashboard selected:', value);
+                                            field.onChange(value);
                                         }}
-                                        value={field.value || ''}
+                                        onBlur={field.onBlur}
+                                        name={field.name}
+                                        inputRef={field.ref}
                                     >
-                                        {dashboardList?.map(dashboard => (
-                                            <MenuItem key={(dashboard as any).dashboard_id} value={(dashboard as any).dashboard_id}>
-                                                {dashboard.name}
+                                        {dashboardList && dashboardList.length > 0 ? (
+                                            dashboardList.map(dashboard => {
+                                                const dashboardId = (dashboard as any).dashboard_id;
+                                                return (
+                                                    <MenuItem key={dashboardId} value={dashboardId}>
+                                                        {dashboard.name}
+                                                    </MenuItem>
+                                                );
+                                            })
+                                        ) : (
+                                            <MenuItem disabled value="">
+                                                {loadingDashboards ? getIntlText('common.loading') : getIntlText('report.message.no_dashboards')}
                                             </MenuItem>
-                                        ))}
+                                        )}
                                     </Select>
                                     {error && <FormHelperText>{getIntlText('report.message.select_dashboard')}</FormHelperText>}
                                 </FormControl>

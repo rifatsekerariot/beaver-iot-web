@@ -20,6 +20,7 @@
     "report.message.no_data_in_range": "No data available for the selected date range.",
     "report.message.failed_to_fetch_entities": "Failed to fetch entities.",
     "report.message.failed_to_fetch_devices": "Failed to fetch devices.",
+    "report.message.no_dashboards": "No dashboards available.",
     "report.table.entity_name": "Entity",
     "report.table.unit": "Unit",
     "report.table.last": "Last",
