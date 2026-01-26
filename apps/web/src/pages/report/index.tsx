@@ -512,6 +512,12 @@ export default function ReportPage() {
                 // 6. Fetch history (timestamped list) per entity; compute last/min/max/avg from it
                 const HISTORY_PAGE_SIZE = 500;
                 const MAX_HISTORY_PAGES = 20;
+                /** Normalize API timestamp to ms. Backend may return seconds (1e9..1e10) or ms (1e12+). */
+                const toTimestampMs = (ts: number): number => {
+                    if (typeof ts !== 'number' || Number.isNaN(ts)) return 0;
+                    if (ts > 0 && ts < 1e11) return ts * 1000;
+                    return ts;
+                };
                 console.log('[ReportPage] [API] Step 6: Fetching entity history (timestamped) for report...');
                 console.log('[ReportPage] [API]   - deviceGroups count:', deviceGroups.length);
                 console.log('[ReportPage] [API]   - Date range (ms): start:', startMs, 'end:', endMs);
@@ -552,15 +558,20 @@ export default function ReportPage() {
                             hasMore = content.length >= HISTORY_PAGE_SIZE;
                             page += 1;
                         }
+                        allPoints.sort((a, b) => toTimestampMs(a.timestamp) - toTimestampMs(b.timestamp));
+                        rawHistory.sort((a, b) => toTimestampMs(Number(a.timestamp)) - toTimestampMs(Number(b.timestamp)));
                         const nums = allPoints.map(p => p.value);
                         const last = allPoints.length > 0 ? allPoints[allPoints.length - 1].value : NaN;
                         const min = nums.length ? Math.min(...nums) : NaN;
                         const max = nums.length ? Math.max(...nums) : NaN;
                         const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : NaN;
-                        const history = rawHistory.map(p => ({
-                            timestamp: getTimeFormat(dayjs(p.timestamp), 'fullDateTimeSecondFormat'),
-                            value: p.value != null && p.value !== '' ? String(p.value) : '—',
-                        }));
+                        const history = rawHistory.map(p => {
+                            const ms = toTimestampMs(Number(p.timestamp));
+                            return {
+                                timestamp: getTimeFormat(dayjs(ms), 'fullDateTimeSecondFormat'),
+                                value: p.value != null && p.value !== '' ? String(p.value) : '—',
+                            };
+                        });
 
                         rows.push({
                             entityName: entity.entityName,
