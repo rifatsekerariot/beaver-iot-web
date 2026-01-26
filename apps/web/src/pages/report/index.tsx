@@ -58,14 +58,25 @@ export default function ReportPage() {
         run: fetchDashboards,
     } = useRequest(
         async () => {
+            console.log('[ReportPage] [API] Starting fetchDashboards API call...');
             const [error, resp] = await awaitWrap(
                 dashboardAPI.getDashboards({
                     name: '',
                 }),
             );
+            console.log('[ReportPage] [API] fetchDashboards response - error:', error, 'resp:', resp);
+            
             const data = getResponseData(resp);
-            if (error || !data || !isRequestSuccess(resp)) return;
-            return (objectToCamelCase(data) as unknown) as DashboardListProps[];
+            console.log('[ReportPage] [API] fetchDashboards - extracted data:', data, 'isRequestSuccess:', isRequestSuccess(resp));
+            
+            if (error || !data || !isRequestSuccess(resp)) {
+                console.error('[ReportPage] [API] fetchDashboards failed - error:', error, 'data:', data, 'resp:', resp);
+                return;
+            }
+            
+            const camelCaseData = (objectToCamelCase(data) as unknown) as DashboardListProps[];
+            console.log('[ReportPage] [API] fetchDashboards success - count:', camelCaseData?.length, 'dashboards:', camelCaseData?.map(d => ({ id: (d as any).dashboard_id, name: d.name })));
+            return camelCaseData;
         },
         { 
             manual: true,
@@ -109,88 +120,139 @@ export default function ReportPage() {
 
     const onGenerate: SubmitHandler<FormData> = useCallback(
         async (formData) => {
+            console.log('[ReportPage] [FORM] ========== FORM SUBMIT STARTED ==========');
+            console.log('[ReportPage] [FORM] formData:', JSON.stringify(formData, null, 2));
+            
             // Get current form values to ensure we have the latest dashboardId
             const currentValues = getValues();
+            console.log('[ReportPage] [FORM] currentValues (getValues):', JSON.stringify(currentValues, null, 2));
+            console.log('[ReportPage] [FORM] watch dashboardId:', dashboardId, 'Type:', typeof dashboardId);
+            
             // Try multiple sources: formData, currentValues, watch value
             const dbId = formData.dashboardId || currentValues.dashboardId || dashboardId;
-            
-            console.log('Form submit - formData.dashboardId:', formData.dashboardId, 'currentValues.dashboardId:', currentValues.dashboardId, 'watch dashboardId:', dashboardId, 'final dbId:', dbId);
+            console.log('[ReportPage] [FORM] Dashboard ID resolution:');
+            console.log('[ReportPage] [FORM]   - formData.dashboardId:', formData.dashboardId, 'Type:', typeof formData.dashboardId);
+            console.log('[ReportPage] [FORM]   - currentValues.dashboardId:', currentValues.dashboardId, 'Type:', typeof currentValues.dashboardId);
+            console.log('[ReportPage] [FORM]   - watch dashboardId:', dashboardId, 'Type:', typeof dashboardId);
+            console.log('[ReportPage] [FORM]   - final dbId:', dbId, 'Type:', typeof dbId);
             
             // Validate dashboardId is not undefined, null, or empty string
             if (!dbId || dbId === '' || dbId === 'undefined' || dbId === 'null' || String(dbId).trim() === '') {
-                console.error('Dashboard ID is invalid:', dbId, 'formData:', formData, 'currentValues:', currentValues);
+                console.error('[ReportPage] [FORM] ❌ Dashboard ID validation failed:', dbId);
+                console.error('[ReportPage] [FORM] formData:', formData);
+                console.error('[ReportPage] [FORM] currentValues:', currentValues);
                 toast.error(getIntlText('report.message.select_dashboard'));
                 return;
             }
+            console.log('[ReportPage] [FORM] ✅ Dashboard ID validation passed:', dbId);
             
             const { reportTitle, companyName, dateRange: dr } = formData;
+            console.log('[ReportPage] [FORM] Form fields - reportTitle:', reportTitle, 'companyName:', companyName, 'dateRange:', dr);
             
             const start = dr?.start?.valueOf();
             const end = dr?.end?.valueOf();
+            console.log('[ReportPage] [FORM] Date range - start:', start, 'end:', end);
             if (start == null || end == null) {
+                console.error('[ReportPage] [FORM] ❌ Date range validation failed');
                 toast.error(getIntlText('report.message.select_date_range'));
                 return;
             }
+            console.log('[ReportPage] [FORM] ✅ Date range validation passed');
+            
+            console.log('[ReportPage] [FORM] Setting generating=true');
             setGenerating(true);
             try {
+                console.log('[ReportPage] [API] ========== API CALLS STARTING ==========');
+                
                 // 1. Get dashboard detail (entity_ids)
                 // Ensure id is converted to the correct type (number if needed)
+                console.log('[ReportPage] [API] Step 1: Converting dashboard ID for API...');
+                console.log('[ReportPage] [API]   - dbId:', dbId, 'Type:', typeof dbId);
+                
                 let dashboardIdForApi: ApiKey;
                 if (typeof dbId === 'string') {
                     // Check if it's a valid number string
                     const trimmed = dbId.trim();
                     if (trimmed === '' || trimmed === 'undefined' || trimmed === 'null') {
-                        console.error('Dashboard ID is invalid string:', dbId);
+                        console.error('[ReportPage] [API] ❌ Dashboard ID is invalid string:', dbId);
                         toast.error(getIntlText('report.message.select_dashboard'));
                         return;
                     }
                     const numValue = Number(trimmed);
                     if (!isNaN(numValue) && trimmed !== '') {
                         dashboardIdForApi = numValue;
+                        console.log('[ReportPage] [API]   - Converted string to number:', dashboardIdForApi);
                     } else {
                         // Keep as string if not a valid number
                         dashboardIdForApi = trimmed;
+                        console.log('[ReportPage] [API]   - Kept as string:', dashboardIdForApi);
                     }
                 } else if (typeof dbId === 'number') {
                     dashboardIdForApi = dbId;
+                    console.log('[ReportPage] [API]   - Already number:', dashboardIdForApi);
                 } else {
-                    console.error('Dashboard ID has invalid type:', typeof dbId, dbId);
+                    console.error('[ReportPage] [API] ❌ Dashboard ID has invalid type:', typeof dbId, dbId);
                     toast.error(getIntlText('report.message.select_dashboard'));
                     return;
                 }
                 
                 // Final validation before API call
                 if (dashboardIdForApi == null || dashboardIdForApi === '' || String(dashboardIdForApi).trim() === '') {
-                    console.error('Dashboard ID is invalid after conversion:', dashboardIdForApi);
+                    console.error('[ReportPage] [API] ❌ Dashboard ID is invalid after conversion:', dashboardIdForApi);
                     toast.error(getIntlText('report.message.select_dashboard'));
                     return;
                 }
+                console.log('[ReportPage] [API] ✅ Dashboard ID for API:', dashboardIdForApi, 'Type:', typeof dashboardIdForApi);
                 
-                console.log('Calling getDashboardDetail with id:', dashboardIdForApi, 'type:', typeof dashboardIdForApi);
+                console.log('[ReportPage] [API] Step 1.1: Calling getDashboardDetail API...');
+                console.log('[ReportPage] [API]   - Request: { id:', dashboardIdForApi, '}');
                 
                 const [err1, resp1] = await awaitWrap(
                     dashboardAPI.getDashboardDetail({
                         id: dashboardIdForApi as ApiKey,
                     }),
                 );
+                
+                console.log('[ReportPage] [API] Step 1.2: getDashboardDetail response received');
+                console.log('[ReportPage] [API]   - error:', err1);
+                console.log('[ReportPage] [API]   - response:', resp1);
+                console.log('[ReportPage] [API]   - isRequestSuccess:', isRequestSuccess(resp1));
+                
                 if (err1 || !isRequestSuccess(resp1)) {
+                    console.error('[ReportPage] [API] ❌ getDashboardDetail failed');
+                    console.error('[ReportPage] [API]   - error:', err1);
+                    console.error('[ReportPage] [API]   - response:', resp1);
+                    
                     // Check if it's an authentication error
                     const errorCode = (resp1?.data as ApiResponse)?.error_code;
+                    console.log('[ReportPage] [API]   - error_code:', errorCode);
                     if (errorCode === 'authentication_failed') {
+                        console.log('[ReportPage] [API]   - Authentication failed, redirecting to login...');
                         // Error handler will redirect to login, just return
                         return;
                     }
                     toast.error(getIntlText('report.message.dashboard_not_found'));
                     return;
                 }
+                
                 const dashboardDetail = getResponseData(resp1) as { entity_ids?: ApiKey[]; name?: string } | null;
+                console.log('[ReportPage] [API] ✅ getDashboardDetail success');
+                console.log('[ReportPage] [API]   - dashboardDetail:', dashboardDetail);
+                
                 const entityIds = dashboardDetail?.entity_ids ?? [];
+                console.log('[ReportPage] [API]   - entity_ids:', entityIds, 'count:', entityIds.length);
+                
                 if (!entityIds.length) {
+                    console.error('[ReportPage] [API] ❌ No entities in dashboard');
                     toast.error(getIntlText('report.message.no_entities_in_dashboard'));
                     return;
                 }
+                console.log('[ReportPage] [API] ✅ Found', entityIds.length, 'entities in dashboard');
 
                 // 2. Get entities with device_id
+                console.log('[ReportPage] [API] Step 2: Calling entityAPI.advancedSearch...');
+                console.log('[ReportPage] [API]   - Request: entityIds:', entityIds);
+                
                 const [err2, resp2] = await awaitWrap(
                     entityAPI.advancedSearch({
                         page_size: 1000,
@@ -202,20 +264,38 @@ export default function ReportPage() {
                         },
                     }),
                 );
+                
+                console.log('[ReportPage] [API] Step 2.1: entityAPI.advancedSearch response received');
+                console.log('[ReportPage] [API]   - error:', err2);
+                console.log('[ReportPage] [API]   - response:', resp2);
+                console.log('[ReportPage] [API]   - isRequestSuccess:', isRequestSuccess(resp2));
+                
                 if (err2 || !isRequestSuccess(resp2)) {
+                    console.error('[ReportPage] [API] ❌ entityAPI.advancedSearch failed');
+                    console.error('[ReportPage] [API]   - error:', err2);
+                    console.error('[ReportPage] [API]   - response:', resp2);
+                    
                     // Check if it's an authentication error
                     const errorCode = (resp2?.data as ApiResponse)?.error_code;
+                    console.log('[ReportPage] [API]   - error_code:', errorCode);
                     if (errorCode === 'authentication_failed') {
+                        console.log('[ReportPage] [API]   - Authentication failed, redirecting to login...');
                         return;
                     }
                     toast.error(getIntlText('report.message.failed_to_fetch_entities'));
                     return;
                 }
+                
                 const entityData = getResponseData(resp2);
+                console.log('[ReportPage] [API] ✅ entityAPI.advancedSearch success');
+                console.log('[ReportPage] [API]   - entityData:', entityData);
+                
                 if (!entityData || typeof entityData !== 'object') {
+                    console.error('[ReportPage] [API] ❌ entityData is invalid:', entityData);
                     toast.error(getIntlText('report.message.failed_to_fetch_entities'));
                     return;
                 }
+                console.log('[ReportPage] [API] ✅ entityData is valid object');
                 const entityDataCamel = objectToCamelCase(entityData) as { content?: Array<{
                     entityId: ApiKey;
                     entityKey: string;
@@ -224,8 +304,10 @@ export default function ReportPage() {
                     entityValueAttribute?: { unit?: string };
                 }> } | null;
                 const entities = entityDataCamel?.content ?? [];
+                console.log('[ReportPage] [API]   - entities count:', entities.length);
 
                 // 3. Group entities by device_id and get unique device_ids
+                console.log('[ReportPage] [API] Step 3: Grouping entities by device_id...');
                 const deviceIdSet = new Set<ApiKey>();
                 const entityMap = new Map<ApiKey, typeof entities>();
                 entities.forEach(entity => {
@@ -238,14 +320,21 @@ export default function ReportPage() {
                         entityMap.get(did)!.push(entity);
                     }
                 });
+                console.log('[ReportPage] [API]   - deviceIdSet size:', deviceIdSet.size);
 
                 const deviceIds = Array.from(deviceIdSet);
+                console.log('[ReportPage] [API]   - deviceIds:', deviceIds);
                 if (!deviceIds.length) {
+                    console.error('[ReportPage] [API] ❌ No devices found in entities');
                     toast.error(getIntlText('report.message.no_devices_in_dashboard'));
                     return;
                 }
+                console.log('[ReportPage] [API] ✅ Found', deviceIds.length, 'devices');
 
                 // 4. Get device names
+                console.log('[ReportPage] [API] Step 4: Calling deviceAPI.getList...');
+                console.log('[ReportPage] [API]   - Request: deviceIds:', deviceIds);
+                
                 const [err3, resp3] = await awaitWrap(
                     deviceAPI.getList({
                         page_size: 1000,
@@ -253,20 +342,38 @@ export default function ReportPage() {
                         id_list: deviceIds,
                     }),
                 );
+                
+                console.log('[ReportPage] [API] Step 4.1: deviceAPI.getList response received');
+                console.log('[ReportPage] [API]   - error:', err3);
+                console.log('[ReportPage] [API]   - response:', resp3);
+                console.log('[ReportPage] [API]   - isRequestSuccess:', isRequestSuccess(resp3));
+                
                 if (err3 || !isRequestSuccess(resp3)) {
+                    console.error('[ReportPage] [API] ❌ deviceAPI.getList failed');
+                    console.error('[ReportPage] [API]   - error:', err3);
+                    console.error('[ReportPage] [API]   - response:', resp3);
+                    
                     // Check if it's an authentication error
                     const errorCode = (resp3?.data as ApiResponse)?.error_code;
+                    console.log('[ReportPage] [API]   - error_code:', errorCode);
                     if (errorCode === 'authentication_failed') {
+                        console.log('[ReportPage] [API]   - Authentication failed, redirecting to login...');
                         return;
                     }
                     toast.error(getIntlText('report.message.failed_to_fetch_devices'));
                     return;
                 }
+                
                 const deviceData = getResponseData(resp3);
+                console.log('[ReportPage] [API] ✅ deviceAPI.getList success');
+                console.log('[ReportPage] [API]   - deviceData:', deviceData);
+                
                 if (!deviceData || typeof deviceData !== 'object') {
+                    console.error('[ReportPage] [API] ❌ deviceData is invalid:', deviceData);
                     toast.error(getIntlText('report.message.failed_to_fetch_devices'));
                     return;
                 }
+                console.log('[ReportPage] [API] ✅ deviceData is valid object');
                 const deviceDataCamel = objectToCamelCase(deviceData) as { content?: Array<{
                     id: ApiKey;
                     name: string;
@@ -290,11 +397,19 @@ export default function ReportPage() {
                 }));
 
                 // 6. Fetch aggregate data for each entity
+                console.log('[ReportPage] [API] Step 6: Fetching aggregate data for entities...');
+                console.log('[ReportPage] [API]   - deviceGroups count:', deviceGroups.length);
+                console.log('[ReportPage] [API]   - Date range: start:', start, 'end:', end);
+                
                 const deviceSections: PdfReportDeviceSection[] = [];
                 for (const group of deviceGroups) {
+                    console.log('[ReportPage] [API]   - Processing device:', group.deviceName, 'entities:', group.entities.length);
                     const rows: PdfReportRow[] = [];
                     for (const entity of group.entities) {
+                        console.log('[ReportPage] [API]     - Fetching aggregate for entity:', entity.entityName, 'id:', entity.entityId);
+                        
                         const agg = async (t: 'LAST' | 'MIN' | 'MAX' | 'AVG') => {
+                            console.log('[ReportPage] [API]       - Calling getAggregateHistory:', t, 'entity_id:', entity.entityId);
                             const [err, resp] = await awaitWrap(
                                 entityAPI.getAggregateHistory({
                                     entity_id: entity.entityId,
@@ -303,16 +418,23 @@ export default function ReportPage() {
                                     aggregate_type: t,
                                 }),
                             );
+                            
+                            console.log('[ReportPage] [API]       - getAggregateHistory response:', t, 'error:', err, 'isRequestSuccess:', resp ? isRequestSuccess(resp) : false);
+                            
                             // Check if it's an authentication error
                             if (resp && !isRequestSuccess(resp)) {
                                 const errorCode = (resp?.data as ApiResponse)?.error_code;
+                                console.log('[ReportPage] [API]       - error_code:', errorCode);
                                 if (errorCode === 'authentication_failed') {
+                                    console.log('[ReportPage] [API]       - Authentication failed, redirecting to login...');
                                     // Error handler will redirect to login
                                     return NaN;
                                 }
                             }
                             const d = !err && isRequestSuccess(resp) ? getResponseData(resp) : null;
-                            return d?.value != null ? (typeof d.value === 'number' ? d.value : Number(d.value)) : NaN;
+                            const value = d?.value != null ? (typeof d.value === 'number' ? d.value : Number(d.value)) : NaN;
+                            console.log('[ReportPage] [API]       - getAggregateHistory result:', t, 'value:', value);
+                            return value;
                         };
 
                         const [last, min, max, avg] = await Promise.all([
@@ -321,6 +443,8 @@ export default function ReportPage() {
                             agg('MAX'),
                             agg('AVG'),
                         ]);
+
+                        console.log('[ReportPage] [API]     - Aggregate values for', entity.entityName, ':', { last, min, max, avg });
 
                         rows.push({
                             entityName: entity.entityName,
@@ -332,21 +456,37 @@ export default function ReportPage() {
                         });
                     }
                     if (rows.length > 0) {
+                        console.log('[ReportPage] [API]   - ✅ Added', rows.length, 'rows for device:', group.deviceName);
                         deviceSections.push({
                             deviceName: group.deviceName,
                             rows,
                         });
+                    } else {
+                        console.log('[ReportPage] [API]   - ⚠️ No rows for device:', group.deviceName);
                     }
                 }
+                
+                console.log('[ReportPage] [API] ✅ Aggregate data fetch completed');
+                console.log('[ReportPage] [API]   - deviceSections count:', deviceSections.length);
 
                 if (deviceSections.length === 0) {
+                    console.error('[ReportPage] [API] ❌ No device sections with data');
                     toast.error(getIntlText('report.message.no_data_in_range'));
                     return;
                 }
+                console.log('[ReportPage] [API] ✅ Found', deviceSections.length, 'device sections with data');
 
                 // 7. Generate PDF
+                console.log('[ReportPage] [PDF] Step 7: Generating PDF...');
                 const dateRangeStr = `${getTimeFormat(dayjs(start), 'simpleDateFormat')} – ${getTimeFormat(dayjs(end), 'simpleDateFormat')}`;
                 const generatedAt = getTimeFormat(dayjs(), 'fullDateTimeSecondFormat');
+                console.log('[ReportPage] [PDF]   - dateRangeStr:', dateRangeStr);
+                console.log('[ReportPage] [PDF]   - generatedAt:', generatedAt);
+                console.log('[ReportPage] [PDF]   - reportTitle:', reportTitle);
+                console.log('[ReportPage] [PDF]   - companyName:', companyName);
+                console.log('[ReportPage] [PDF]   - dashboardName:', dashboardName);
+                console.log('[ReportPage] [PDF]   - deviceSections count:', deviceSections.length);
+                
                 const blob = buildTelemetryPdf({
                     title: reportTitle ?? '',
                     companyName: companyName ?? '',
@@ -370,12 +510,21 @@ export default function ReportPage() {
                 });
 
                 const fileName = `TelemetryReport_${getTimeFormat(dayjs(), 'simpleDateFormat').replace(/-/g, '_')}_${genRandomString(6, { upperCase: false, lowerCase: true })}.pdf`;
+                console.log('[ReportPage] [PDF]   - fileName:', fileName);
+                console.log('[ReportPage] [PDF]   - Downloading PDF...');
+                
                 linkDownload(blob, fileName);
+                console.log('[ReportPage] [PDF] ✅ PDF download initiated');
+                console.log('[ReportPage] [FORM] ========== FORM SUBMIT SUCCESS ==========');
                 toast.success(getIntlText('report.message.success'));
             } catch (e) {
-                console.error('PDF generation error:', e);
+                console.error('[ReportPage] [ERROR] ========== PDF GENERATION ERROR ==========');
+                console.error('[ReportPage] [ERROR] Error:', e);
+                console.error('[ReportPage] [ERROR] Error stack:', e instanceof Error ? e.stack : 'No stack trace');
+                console.error('[ReportPage] [ERROR] ============================================');
                 toast.error(getIntlText('report.message.generate_failed'));
             } finally {
+                console.log('[ReportPage] [FORM] Setting generating=false');
                 setGenerating(false);
             }
         },
@@ -408,44 +557,58 @@ export default function ReportPage() {
                                             disabled={loadingDashboards || generating}
                                             displayEmpty
                                             value={selectValue}
-                                            onChange={(e: SelectChangeEvent<string>) => {
-                                                const selectedValue = e.target.value;
-                                                console.log('[Dashboard Select] onChange - selectedValue:', selectedValue, 'current field.value:', field.value);
-                                                
-                                                // Handle empty selection
-                                                if (!selectedValue || selectedValue === '') {
-                                                    console.log('[Dashboard Select] Empty selection, setting to undefined');
-                                                    field.onChange(undefined);
-                                                    return;
+                                        onChange={(e: SelectChangeEvent<string>) => {
+                                            const selectedValue = e.target.value;
+                                            console.log('[ReportPage] [SELECT] ========== DASHBOARD SELECT onChange ==========');
+                                            console.log('[ReportPage] [SELECT] selectedValue:', selectedValue, 'Type:', typeof selectedValue);
+                                            console.log('[ReportPage] [SELECT] current field.value:', field.value, 'Type:', typeof field.value);
+                                            console.log('[ReportPage] [SELECT] dashboardList length:', dashboardList?.length);
+                                            
+                                            // Handle empty selection
+                                            if (!selectedValue || selectedValue === '') {
+                                                console.log('[ReportPage] [SELECT] Empty selection, setting to undefined');
+                                                field.onChange(undefined);
+                                                console.log('[ReportPage] [SELECT] After onChange - field.value:', field.value);
+                                                return;
+                                            }
+                                            
+                                            // Find dashboard in list by matching string ID
+                                            console.log('[ReportPage] [SELECT] Searching for dashboard in list...');
+                                            const foundDashboard = dashboardList?.find(d => {
+                                                const dId = (d as any).dashboard_id;
+                                                const dIdString = String(dId);
+                                                const match = dIdString === selectedValue;
+                                                if (match) {
+                                                    console.log('[ReportPage] [SELECT]   - Match found:', { dId, dIdString, selectedValue, name: d.name });
                                                 }
-                                                
-                                                // Find dashboard in list by matching string ID
-                                                const foundDashboard = dashboardList?.find(d => {
-                                                    const dId = (d as any).dashboard_id;
-                                                    return String(dId) === selectedValue;
-                                                });
-                                                
-                                                if (!foundDashboard) {
-                                                    console.error('[Dashboard Select] Dashboard not found for value:', selectedValue);
-                                                    console.error('[Dashboard Select] Available dashboards:', dashboardList?.map(d => ({ 
-                                                        id: (d as any).dashboard_id, 
-                                                        idString: String((d as any).dashboard_id),
-                                                        name: d.name 
-                                                    })));
-                                                    field.onChange(undefined);
-                                                    return;
-                                                }
-                                                
-                                                // Get original ID from dashboard object (preserve type: number or string)
-                                                const originalId = (foundDashboard as any).dashboard_id;
-                                                console.log('[Dashboard Select] Found dashboard, originalId:', originalId, 'Type:', typeof originalId);
-                                                
-                                                // Update form state with original ID
-                                                field.onChange(originalId as ApiKey);
-                                                
-                                                // Verify the update immediately
-                                                console.log('[Dashboard Select] After field.onChange - field.value:', field.value);
-                                            }}
+                                                return match;
+                                            });
+                                            
+                                            if (!foundDashboard) {
+                                                console.error('[ReportPage] [SELECT] ❌ Dashboard not found for value:', selectedValue);
+                                                console.error('[ReportPage] [SELECT] Available dashboards:', dashboardList?.map(d => ({ 
+                                                    id: (d as any).dashboard_id, 
+                                                    idString: String((d as any).dashboard_id),
+                                                    name: d.name 
+                                                })));
+                                                field.onChange(undefined);
+                                                console.log('[ReportPage] [SELECT] After onChange (not found) - field.value:', field.value);
+                                                return;
+                                            }
+                                            
+                                            // Get original ID from dashboard object (preserve type: number or string)
+                                            const originalId = (foundDashboard as any).dashboard_id;
+                                            console.log('[ReportPage] [SELECT] ✅ Found dashboard:', foundDashboard.name);
+                                            console.log('[ReportPage] [SELECT]   - originalId:', originalId, 'Type:', typeof originalId);
+                                            
+                                            // Update form state with original ID
+                                            console.log('[ReportPage] [SELECT] Calling field.onChange with:', originalId);
+                                            field.onChange(originalId as ApiKey);
+                                            
+                                            // Verify the update immediately
+                                            console.log('[ReportPage] [SELECT] After field.onChange - field.value:', field.value, 'Type:', typeof field.value);
+                                            console.log('[ReportPage] [SELECT] ============================================');
+                                        }}
                                             onBlur={field.onBlur}
                                             name={field.name}
                                             inputRef={field.ref}
