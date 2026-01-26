@@ -292,11 +292,23 @@ export default function ReportPage() {
                 if (rawEntities.length && !entityIds.length) {
                     rawEntities.forEach(e => addId((e.id ?? e.entity_id) as ApiKey));
                 }
+                const entityLikeKeys = ['entity', 'adc', 'adv', 'modbus', 'co2', 'tvoc', 'pm25', 'pm10'] as const;
                 const scan = (obj: unknown): void => {
                     if (obj == null || typeof obj !== 'object') return;
                     const o = obj as Record<string, unknown>;
-                    const id = o.entity_id ?? o.entityId ?? (o.entity && typeof o.entity === 'object' && (o.entity as Record<string, unknown>).value);
+                    const id =
+                        o.entity_id ??
+                        o.entityId ??
+                        (o.entity && typeof o.entity === 'object' && (o.entity as Record<string, unknown>).value) ??
+                        (typeof o.value === 'string' || typeof o.value === 'number' ? o.value : null);
                     if (id != null && (typeof id === 'string' || typeof id === 'number')) addId(id as ApiKey);
+                    entityLikeKeys.forEach(k => {
+                        const v = o[k];
+                        if (v && typeof v === 'object' && 'value' in v) {
+                            const vv = (v as Record<string, unknown>).value;
+                            if (typeof vv === 'string' || typeof vv === 'number') addId(vv as ApiKey);
+                        }
+                    });
                     if (Array.isArray(o.entities)) o.entities.forEach((e: unknown) => scan(e));
                     if (Array.isArray(o.entityList)) o.entityList.forEach((e: unknown) => scan(e));
                     if (o.data && typeof o.data === 'object') scan(o.data);
@@ -387,12 +399,14 @@ export default function ReportPage() {
                             allRaw.push({ entityId: id, entityKey: key, entityName: name, deviceId, entityValueAttribute: va });
                         });
                     }
-                    // Use all PROPERTY entities per device (like Entity Data tab). Do not filter by
-                    // entityIdSet (widget-bound only): that would hide telemetry (e.g. Humidity, Temperature)
-                    // not used in widgets and cause "sadece 1 telemetry" in the report.
-                    entities = allRaw;
+                    // Report only dashboard-selected telemetry (aşı dolabı ısı takibi vb.): filter by
+                    // entityIdSet (canvas entity_ids + widget-bound entities). Never list all entities.
                     if (entityIdSet.size > 0) {
-                        console.log('[ReportPage] [API]   - entityIdSet from canvas/widgets:', entityIdSet.size, '(report uses all entities, no filter)');
+                        entities = allRaw.filter(e => entityIdSet.has(String(e.entityId)));
+                        console.log('[ReportPage] [API]   - filtered by dashboard-selected entity_ids:', entities.length, 'of', allRaw.length);
+                    } else {
+                        entities = allRaw;
+                        console.log('[ReportPage] [API]   - no entityIdSet, using all entities for devices');
                     }
                     console.log('[ReportPage] [API] ✅ entities fetched by DEVICE_ID (EQ per device), count:', entities.length);
                 }
