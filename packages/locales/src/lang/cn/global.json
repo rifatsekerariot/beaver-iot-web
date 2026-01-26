@@ -106,6 +106,7 @@
     "common.label.last_modified_time": "最后更新时间",
     "common.label.latitude": "纬度",
     "common.label.loading": "加载中...",
+    "common.loading": "加载中...",
     "common.label.local_upload": "本地上传",
     "common.label.location": "位置",
     "common.label.log": "日志",

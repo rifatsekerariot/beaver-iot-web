@@ -99,10 +99,13 @@ export default function ReportPage() {
             
             console.log('Form submit - dbId:', dbId, 'currentValues.dashboardId:', currentValues.dashboardId, 'watch dashboardId:', dashboardId, 'finalDashboardId:', finalDashboardId);
             
-            if (!finalDashboardId) {
+            // Validate dashboardId is not undefined, null, or empty string
+            if (!finalDashboardId || finalDashboardId === '' || finalDashboardId === 'undefined' || finalDashboardId === 'null') {
+                console.error('Dashboard ID is invalid:', finalDashboardId);
                 toast.error(getIntlText('report.message.select_dashboard'));
                 return;
             }
+            
             const start = dr?.start?.valueOf();
             const end = dr?.end?.valueOf();
             if (start == null || end == null) {
@@ -113,9 +116,26 @@ export default function ReportPage() {
             try {
                 // 1. Get dashboard detail (entity_ids)
                 // Ensure id is converted to the correct type (number if needed)
-                const dashboardIdForApi = typeof finalDashboardId === 'string' && !isNaN(Number(finalDashboardId)) 
-                    ? Number(finalDashboardId) 
-                    : finalDashboardId;
+                let dashboardIdForApi: ApiKey;
+                if (typeof finalDashboardId === 'string') {
+                    // Check if it's a valid number string
+                    const numValue = Number(finalDashboardId);
+                    if (!isNaN(numValue) && finalDashboardId.trim() !== '') {
+                        dashboardIdForApi = numValue;
+                    } else {
+                        // Keep as string if not a valid number
+                        dashboardIdForApi = finalDashboardId;
+                    }
+                } else {
+                    dashboardIdForApi = finalDashboardId;
+                }
+                
+                // Final validation before API call
+                if (!dashboardIdForApi || dashboardIdForApi === 'undefined' || dashboardIdForApi === 'null') {
+                    console.error('Dashboard ID is invalid after conversion:', dashboardIdForApi);
+                    toast.error(getIntlText('report.message.select_dashboard'));
+                    return;
+                }
                 
                 console.log('Calling getDashboardDetail with id:', dashboardIdForApi, 'type:', typeof dashboardIdForApi);
                 

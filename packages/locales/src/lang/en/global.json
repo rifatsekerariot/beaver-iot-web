@@ -106,6 +106,7 @@
     "common.label.last_modified_time": "Last Updated Time",
     "common.label.latitude": "Latitude",
     "common.label.loading": "Loading...",
+    "common.loading": "Loading...",
     "common.label.local_upload": "Local Upload",
     "common.label.location": "Location",
     "common.label.log": "Log",
