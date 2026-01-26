@@ -10,7 +10,6 @@ import { DateRangePickerValueType } from '@/components/date-range-picker';
 import { DateRangePicker } from '@/components';
 import { Breadcrumbs } from '@/components';
 import { entityAPI, dashboardAPI, deviceAPI, awaitWrap, getResponseData, isRequestSuccess, type DashboardListProps } from '@/services/http';
-import { ENTITY_TYPE } from '@/constants';
 import { buildTelemetryPdf, type PdfReportRow, type PdfReportDeviceSection } from './utils/pdfReport';
 
 import './style.less';
@@ -244,76 +243,88 @@ export default function ReportPage() {
                     return;
                 }
                 
-                const canvasDetail = getResponseData(resp1) as { entity_ids?: ApiKey[]; name?: string } | null;
+                type NormalizedEntity = { entityId: ApiKey; entityKey: string; entityName: string; deviceId?: ApiKey; entityValueAttribute?: { unit?: string } };
+                const canvasDetail = getResponseData(resp1) as {
+                    entity_ids?: ApiKey[];
+                    entities?: Array<{
+                        id?: ApiKey;
+                        entity_id?: ApiKey;
+                        key?: string;
+                        entity_key?: string;
+                        name?: string;
+                        entity_name?: string;
+                        device_id?: ApiKey;
+                        value_attribute?: { unit?: string };
+                        entity_value_attribute?: { unit?: string };
+                    }>;
+                    name?: string;
+                } | null;
                 console.log('[ReportPage] [API] ✅ getDrawingBoardDetail success');
                 console.log('[ReportPage] [API]   - canvasDetail:', canvasDetail);
-                
                 const entityIds = canvasDetail?.entity_ids ?? [];
+                const rawEntities = canvasDetail?.entities ?? [];
                 console.log('[ReportPage] [API]   - entity_ids:', entityIds, 'count:', entityIds.length);
-                
-                if (!entityIds.length) {
+                console.log('[ReportPage] [API]   - entities:', rawEntities?.length ?? 0);
+
+                let entities: NormalizedEntity[] = [];
+
+                let idsToSearch = entityIds;
+                if (rawEntities.length > 0) {
+                    const mapped: NormalizedEntity[] = rawEntities
+                        .map((e: Record<string, unknown>) => {
+                            const id = (e.id ?? e.entity_id) as ApiKey | undefined;
+                            const key = String(e.key ?? e.entity_key ?? '');
+                            const name = String(e.name ?? e.entity_name ?? '');
+                            const deviceId = (e.device_id as ApiKey | undefined) ?? undefined;
+                            const va = (e.value_attribute ?? e.entity_value_attribute) as { unit?: string } | undefined;
+                            if (!id) return null;
+                            return { entityId: id, entityKey: key, entityName: name, deviceId, entityValueAttribute: va };
+                        })
+                        .filter((e): e is NormalizedEntity => !!e);
+                    const withDevice = mapped.filter(e => e.deviceId != null);
+                    if (withDevice.length > 0) {
+                        console.log('[ReportPage] [API] Using canvas.entities (skip advanced-search), count:', withDevice.length);
+                        entities = withDevice;
+                    } else if (mapped.length > 0 && !idsToSearch.length) {
+                        idsToSearch = mapped.map(e => e.entityId);
+                    }
+                }
+
+                if (entities.length === 0 && idsToSearch.length > 0) {
+                    console.log('[ReportPage] [API] Step 2: Calling entityAPI.advancedSearch (ENTITY_ID only)...');
+                    const [err2, resp2] = await awaitWrap(
+                        entityAPI.advancedSearch({
+                            page_size: 1000,
+                            page_number: 1,
+                            sorts: [{ direction: 'ASC' as const, property: 'key' }],
+                            entity_filter: {
+                                ENTITY_ID: { operator: 'ANY_EQUALS' as const, values: idsToSearch },
+                            },
+                        }),
+                    );
+                    if (err2 || !isRequestSuccess(resp2)) {
+                        console.error('[ReportPage] [API] ❌ entityAPI.advancedSearch failed');
+                        const errorCode = (resp2?.data as ApiResponse)?.error_code;
+                        if (errorCode === 'authentication_failed') return;
+                        toast.error(getIntlText('report.message.failed_to_fetch_entities'));
+                        return;
+                    }
+                    const entityData = getResponseData(resp2);
+                    if (!entityData || typeof entityData !== 'object') {
+                        toast.error(getIntlText('report.message.failed_to_fetch_entities'));
+                        return;
+                    }
+                    const entityDataCamel = objectToCamelCase(entityData) as { content?: NormalizedEntity[] } | null;
+                    entities = entityDataCamel?.content ?? [];
+                    console.log('[ReportPage] [API] ✅ entityAPI.advancedSearch success, entities:', entities.length);
+                }
+
+                if (!entities.length) {
                     console.error('[ReportPage] [API] ❌ No entities in dashboard');
                     toast.error(getIntlText('report.message.no_entities_in_dashboard'));
                     return;
                 }
-                console.log('[ReportPage] [API] ✅ Found', entityIds.length, 'entities in dashboard');
-
-                // 2. Get entities with device_id
-                console.log('[ReportPage] [API] Step 2: Calling entityAPI.advancedSearch...');
-                console.log('[ReportPage] [API]   - Request: entityIds:', entityIds);
-                
-                const [err2, resp2] = await awaitWrap(
-                    entityAPI.advancedSearch({
-                        page_size: 1000,
-                        page_number: 1,
-                        sorts: [{ direction: 'ASC' as const, property: 'key' }],
-                        entity_filter: {
-                            ENTITY_ID: { operator: 'ANY_EQUALS' as const, values: entityIds },
-                            ENTITY_TYPE: { operator: 'ANY_EQUALS' as const, values: [ENTITY_TYPE.PROPERTY] },
-                        },
-                    }),
-                );
-                
-                console.log('[ReportPage] [API] Step 2.1: entityAPI.advancedSearch response received');
-                console.log('[ReportPage] [API]   - error:', err2);
-                console.log('[ReportPage] [API]   - response:', resp2);
-                console.log('[ReportPage] [API]   - isRequestSuccess:', isRequestSuccess(resp2));
-                
-                if (err2 || !isRequestSuccess(resp2)) {
-                    console.error('[ReportPage] [API] ❌ entityAPI.advancedSearch failed');
-                    console.error('[ReportPage] [API]   - error:', err2);
-                    console.error('[ReportPage] [API]   - response:', resp2);
-                    
-                    // Check if it's an authentication error
-                    const errorCode = (resp2?.data as ApiResponse)?.error_code;
-                    console.log('[ReportPage] [API]   - error_code:', errorCode);
-                    if (errorCode === 'authentication_failed') {
-                        console.log('[ReportPage] [API]   - Authentication failed, redirecting to login...');
-                        return;
-                    }
-                    toast.error(getIntlText('report.message.failed_to_fetch_entities'));
-                    return;
-                }
-                
-                const entityData = getResponseData(resp2);
-                console.log('[ReportPage] [API] ✅ entityAPI.advancedSearch success');
-                console.log('[ReportPage] [API]   - entityData:', entityData);
-                
-                if (!entityData || typeof entityData !== 'object') {
-                    console.error('[ReportPage] [API] ❌ entityData is invalid:', entityData);
-                    toast.error(getIntlText('report.message.failed_to_fetch_entities'));
-                    return;
-                }
-                console.log('[ReportPage] [API] ✅ entityData is valid object');
-                const entityDataCamel = objectToCamelCase(entityData) as { content?: Array<{
-                    entityId: ApiKey;
-                    entityKey: string;
-                    entityName: string;
-                    deviceId?: ApiKey;
-                    entityValueAttribute?: { unit?: string };
-                }> } | null;
-                const entities = entityDataCamel?.content ?? [];
-                console.log('[ReportPage] [API]   - entities count:', entities.length);
+                console.log('[ReportPage] [API] ✅ Using', entities.length, 'entities');
 
                 // 3. Group entities by device_id and get unique device_ids
                 console.log('[ReportPage] [API] Step 3: Grouping entities by device_id...');
