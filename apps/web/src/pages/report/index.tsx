@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useForm, Controller, type SubmitHandler } from 'react-hook-form';
-import { Box, Button, FormControl, Stack, TextField, Select, MenuItem, InputLabel, FormHelperText } from '@mui/material';
+import { Box, Button, FormControl, Stack, TextField, Select, MenuItem, InputLabel, FormHelperText, type SelectChangeEvent } from '@mui/material';
 import { useRequest } from 'ahooks';
 import { useI18n, useTime } from '@milesight/shared/src/hooks';
 import { objectToCamelCase } from '@milesight/shared/src/utils/tools';
@@ -39,7 +39,14 @@ export default function ReportPage() {
     const [generating, setGenerating] = useState(false);
     const [dashboardName, setDashboardName] = useState<string>('');
 
-    const { control, handleSubmit, watch } = useForm<FormData>({ shouldUnregister: true });
+    const { control, handleSubmit, watch } = useForm<FormData>({ 
+        defaultValues: {
+            dashboardId: undefined,
+            reportTitle: '',
+            companyName: '',
+            dateRange: null,
+        },
+    });
     const dashboardId = watch('dashboardId');
     const dateRange = watch('dateRange');
 
@@ -71,9 +78,14 @@ export default function ReportPage() {
 
     // Fetch dashboard detail when dashboard is selected
     useEffect(() => {
-        if (dashboardId) {
-            const selected = dashboardList?.find(d => (d as any).dashboard_id === dashboardId);
+        if (dashboardId != null) {
+            // Compare as strings since we convert to string in Select
+            const selected = dashboardList?.find(d => {
+                const dId = (d as any).dashboard_id;
+                return String(dId) === String(dashboardId) || dId === dashboardId;
+            });
             setDashboardName(selected?.name ?? '');
+            console.log('Dashboard name updated:', selected?.name);
         } else {
             setDashboardName('');
         }
@@ -304,11 +316,14 @@ export default function ReportPage() {
                                     <Select
                                         labelId="dashboard-select-label"
                                         disabled={loadingDashboards || generating}
-                                        value={field.value ?? ''}
-                                        onChange={(e) => {
+                                        value={field.value != null ? String(field.value) : ''}
+                                        onChange={(e: SelectChangeEvent<string>) => {
                                             const value = e.target.value;
-                                            console.log('Dashboard selected:', value);
-                                            field.onChange(value);
+                                            console.log('Dashboard selected:', value, 'Type:', typeof value);
+                                            // Convert to ApiKey type (could be string or number)
+                                            const apiKeyValue = value === '' ? undefined : (value as ApiKey);
+                                            console.log('Setting field value to:', apiKeyValue);
+                                            field.onChange(apiKeyValue);
                                         }}
                                         onBlur={field.onBlur}
                                         name={field.name}
@@ -317,8 +332,10 @@ export default function ReportPage() {
                                         {dashboardList && dashboardList.length > 0 ? (
                                             dashboardList.map(dashboard => {
                                                 const dashboardId = (dashboard as any).dashboard_id;
+                                                // Ensure value is string for Material-UI Select
+                                                const stringId = String(dashboardId);
                                                 return (
-                                                    <MenuItem key={dashboardId} value={dashboardId}>
+                                                    <MenuItem key={stringId} value={stringId}>
                                                         {dashboard.name}
                                                     </MenuItem>
                                                 );
