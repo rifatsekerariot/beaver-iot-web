@@ -387,11 +387,12 @@ export default function ReportPage() {
                             allRaw.push({ entityId: id, entityKey: key, entityName: name, deviceId, entityValueAttribute: va });
                         });
                     }
+                    // Use all PROPERTY entities per device (like Entity Data tab). Do not filter by
+                    // entityIdSet (widget-bound only): that would hide telemetry (e.g. Humidity, Temperature)
+                    // not used in widgets and cause "sadece 1 telemetry" in the report.
+                    entities = allRaw;
                     if (entityIdSet.size > 0) {
-                        entities = allRaw.filter(e => entityIdSet.has(String(e.entityId)));
-                        console.log('[ReportPage] [API]   - filtered by entity_ids:', entities.length, 'of', allRaw.length);
-                    } else {
-                        entities = allRaw;
+                        console.log('[ReportPage] [API]   - entityIdSet from canvas/widgets:', entityIdSet.size, '(report uses all entities, no filter)');
                     }
                     console.log('[ReportPage] [API] ✅ entities fetched by DEVICE_ID (EQ per device), count:', entities.length);
                 }
