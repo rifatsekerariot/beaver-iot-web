@@ -73,10 +73,10 @@ export default function ReportPage() {
                 console.error('[ReportPage] [API] fetchDashboards failed - error:', error, 'data:', data, 'resp:', resp);
                 return;
             }
-            
-            const camelCaseData = (objectToCamelCase(data) as unknown) as DashboardListProps[];
-            console.log('[ReportPage] [API] fetchDashboards success - count:', camelCaseData?.length, 'dashboards:', camelCaseData?.map(d => ({ id: (d as any).dashboard_id, name: d.name })));
-            return camelCaseData;
+            // Use raw response (snake_case). objectToCamelCase breaks dashboard_id -> undefined.
+            const list = (Array.isArray(data) ? data : (data as any)?.data ?? data) as DashboardListProps[];
+            console.log('[ReportPage] [API] fetchDashboards success - count:', list?.length, 'dashboards:', list?.map(d => ({ id: d.dashboard_id, name: d.name })));
+            return list;
         },
         { 
             manual: true,
@@ -92,7 +92,7 @@ export default function ReportPage() {
     // Debug: Log dashboard list when it changes
     useEffect(() => {
         if (dashboardList) {
-            console.log('[ReportPage] Dashboard list updated:', dashboardList.length, 'dashboards:', dashboardList.map(d => ({ id: (d as any).dashboard_id, name: d.name })));
+            console.log('[ReportPage] Dashboard list updated:', dashboardList.length, 'dashboards:', dashboardList.map(d => ({ id: d.dashboard_id, name: d.name })));
         }
     }, [dashboardList]);
 
@@ -102,7 +102,7 @@ export default function ReportPage() {
         if (dashboardId != null && dashboardId !== '' && dashboardId !== 'undefined') {
             // Compare as strings since we convert to string in Select
             const selected = dashboardList?.find(d => {
-                const dId = (d as any).dashboard_id;
+                const dId = d.dashboard_id;
                 const match = String(dId) === String(dashboardId) || dId === dashboardId;
                 if (match) {
                     console.log('[ReportPage] Found matching dashboard:', { dId, dashboardId, name: d.name });
@@ -575,7 +575,7 @@ export default function ReportPage() {
                                             // Find dashboard in list by matching string ID
                                             console.log('[ReportPage] [SELECT] Searching for dashboard in list...');
                                             const foundDashboard = dashboardList?.find(d => {
-                                                const dId = (d as any).dashboard_id;
+                                                const dId = d.dashboard_id;
                                                 const dIdString = String(dId);
                                                 const match = dIdString === selectedValue;
                                                 if (match) {
@@ -587,8 +587,8 @@ export default function ReportPage() {
                                             if (!foundDashboard) {
                                                 console.error('[ReportPage] [SELECT] ❌ Dashboard not found for value:', selectedValue);
                                                 console.error('[ReportPage] [SELECT] Available dashboards:', dashboardList?.map(d => ({ 
-                                                    id: (d as any).dashboard_id, 
-                                                    idString: String((d as any).dashboard_id),
+                                                    id: d.dashboard_id, 
+                                                    idString: String(d.dashboard_id),
                                                     name: d.name 
                                                 })));
                                                 field.onChange(undefined);
@@ -597,7 +597,7 @@ export default function ReportPage() {
                                             }
                                             
                                             // Get original ID from dashboard object (preserve type: number or string)
-                                            const originalId = (foundDashboard as any).dashboard_id;
+                                            const originalId = foundDashboard.dashboard_id;
                                             console.log('[ReportPage] [SELECT] ✅ Found dashboard:', foundDashboard.name);
                                             console.log('[ReportPage] [SELECT]   - originalId:', originalId, 'Type:', typeof originalId);
                                             
@@ -615,8 +615,8 @@ export default function ReportPage() {
                                         >
                                             {dashboardList && dashboardList.length > 0 ? (
                                                 dashboardList.map(dashboard => {
-                                                    const dashboardId = (dashboard as any).dashboard_id;
-                                                    const stringId = String(dashboardId);
+                                                    const id = dashboard.dashboard_id;
+                                                    const stringId = String(id);
                                                     return (
                                                         <MenuItem key={stringId} value={stringId}>
                                                             {dashboard.name}
