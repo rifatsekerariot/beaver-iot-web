@@ -39,13 +39,14 @@ export default function ReportPage() {
     const [generating, setGenerating] = useState(false);
     const [dashboardName, setDashboardName] = useState<string>('');
 
-    const { control, handleSubmit, watch, getValues } = useForm<FormData>({ 
+    const { control, handleSubmit, watch, getValues, setValue } = useForm<FormData>({ 
         defaultValues: {
             dashboardId: undefined,
             reportTitle: '',
             companyName: '',
             dateRange: null,
         },
+        mode: 'onChange', // Validate on change
     });
     const dashboardId = watch('dashboardId');
     const dateRange = watch('dateRange');
@@ -394,79 +395,81 @@ export default function ReportPage() {
                         <Controller
                             name="dashboardId"
                             control={control}
-                            rules={{ required: true }}
-                            render={({ field, fieldState: { error } }) => (
-                                <FormControl size="small" sx={{ minWidth: 280 }} error={!!error} required>
-                                    <InputLabel id="dashboard-select-label">{getIntlText('report.form.dashboard')}</InputLabel>
-                                    <Select
-                                        labelId="dashboard-select-label"
-                                        disabled={loadingDashboards || generating}
-                                        displayEmpty
-                                        value={field.value != null && field.value !== undefined && field.value !== '' ? String(field.value) : ''}
-                                        onChange={(e: SelectChangeEvent<string>) => {
-                                            const selectedValue = e.target.value;
-                                            console.log('[Dashboard Select] onChange triggered - selectedValue:', selectedValue, 'dashboardList length:', dashboardList?.length);
-                                            
-                                            if (!selectedValue || selectedValue === '' || selectedValue === 'undefined' || selectedValue === 'null') {
-                                                console.log('[Dashboard Select] Empty value, setting to undefined');
-                                                field.onChange(undefined);
-                                                return;
-                                            }
-                                            
-                                            // Find the dashboard to get the original ID type
-                                            const selectedDashboard = dashboardList?.find(d => {
-                                                const dId = (d as any).dashboard_id;
-                                                const dIdString = String(dId);
-                                                const match = dIdString === selectedValue || dId === selectedValue;
-                                                if (match) {
-                                                    console.log('[Dashboard Select] Found dashboard - dId:', dId, 'dIdString:', dIdString, 'selectedValue:', selectedValue);
+                            rules={{ required: getIntlText('report.message.select_dashboard') }}
+                            render={({ field, fieldState: { error } }) => {
+                                // Convert field value to string for Select component
+                                const selectValue = field.value != null && field.value !== undefined ? String(field.value) : '';
+                                
+                                return (
+                                    <FormControl size="small" sx={{ minWidth: 280 }} error={!!error} required>
+                                        <InputLabel id="dashboard-select-label">{getIntlText('report.form.dashboard')}</InputLabel>
+                                        <Select
+                                            labelId="dashboard-select-label"
+                                            disabled={loadingDashboards || generating}
+                                            displayEmpty
+                                            value={selectValue}
+                                            onChange={(e: SelectChangeEvent<string>) => {
+                                                const selectedValue = e.target.value;
+                                                console.log('[Dashboard Select] onChange - selectedValue:', selectedValue, 'current field.value:', field.value);
+                                                
+                                                // Handle empty selection
+                                                if (!selectedValue || selectedValue === '') {
+                                                    console.log('[Dashboard Select] Empty selection, setting to undefined');
+                                                    field.onChange(undefined);
+                                                    return;
                                                 }
-                                                return match;
-                                            });
-                                            
-                                            if (!selectedDashboard) {
-                                                console.error('[Dashboard Select] Dashboard not found for value:', selectedValue, 'Available dashboards:', dashboardList?.map(d => ({ id: (d as any).dashboard_id, name: d.name })));
-                                                field.onChange(undefined);
-                                                return;
-                                            }
-                                            
-                                            const originalId = (selectedDashboard as any).dashboard_id;
-                                            console.log('[Dashboard Select] Setting field value to original ID:', originalId, 'Type:', typeof originalId);
-                                            
-                                            // Use the original ID type (number or string) from the dashboard object
-                                            field.onChange(originalId as ApiKey);
-                                            
-                                            // Verify the update
-                                            setTimeout(() => {
-                                                const updatedValue = getValues('dashboardId');
-                                                const watchValue = watch('dashboardId');
-                                                console.log('[Dashboard Select] After onChange - getValues:', updatedValue, 'watch:', watchValue, 'field.value:', field.value);
-                                            }, 50);
-                                        }}
-                                        onBlur={field.onBlur}
-                                        name={field.name}
-                                        inputRef={field.ref}
-                                    >
-                                        {dashboardList && dashboardList.length > 0 ? (
-                                            dashboardList.map(dashboard => {
-                                                const dashboardId = (dashboard as any).dashboard_id;
-                                                // Ensure value is string for Material-UI Select
-                                                const stringId = String(dashboardId);
-                                                return (
-                                                    <MenuItem key={stringId} value={stringId}>
-                                                        {dashboard.name}
-                                                    </MenuItem>
-                                                );
-                                            })
-                                        ) : (
-                                            <MenuItem disabled value="">
-                                                {loadingDashboards ? getIntlText('common.loading') : getIntlText('report.message.no_dashboards')}
-                                            </MenuItem>
-                                        )}
-                                    </Select>
-                                    {error && <FormHelperText>{getIntlText('report.message.select_dashboard')}</FormHelperText>}
-                                </FormControl>
-                            )}
+                                                
+                                                // Find dashboard in list by matching string ID
+                                                const foundDashboard = dashboardList?.find(d => {
+                                                    const dId = (d as any).dashboard_id;
+                                                    return String(dId) === selectedValue;
+                                                });
+                                                
+                                                if (!foundDashboard) {
+                                                    console.error('[Dashboard Select] Dashboard not found for value:', selectedValue);
+                                                    console.error('[Dashboard Select] Available dashboards:', dashboardList?.map(d => ({ 
+                                                        id: (d as any).dashboard_id, 
+                                                        idString: String((d as any).dashboard_id),
+                                                        name: d.name 
+                                                    })));
+                                                    field.onChange(undefined);
+                                                    return;
+                                                }
+                                                
+                                                // Get original ID from dashboard object (preserve type: number or string)
+                                                const originalId = (foundDashboard as any).dashboard_id;
+                                                console.log('[Dashboard Select] Found dashboard, originalId:', originalId, 'Type:', typeof originalId);
+                                                
+                                                // Update form state with original ID
+                                                field.onChange(originalId as ApiKey);
+                                                
+                                                // Verify the update immediately
+                                                console.log('[Dashboard Select] After field.onChange - field.value:', field.value);
+                                            }}
+                                            onBlur={field.onBlur}
+                                            name={field.name}
+                                            inputRef={field.ref}
+                                        >
+                                            {dashboardList && dashboardList.length > 0 ? (
+                                                dashboardList.map(dashboard => {
+                                                    const dashboardId = (dashboard as any).dashboard_id;
+                                                    const stringId = String(dashboardId);
+                                                    return (
+                                                        <MenuItem key={stringId} value={stringId}>
+                                                            {dashboard.name}
+                                                        </MenuItem>
+                                                    );
+                                                })
+                                            ) : (
+                                                <MenuItem disabled value="">
+                                                    {loadingDashboards ? getIntlText('common.loading') : getIntlText('report.message.no_dashboards')}
+                                                </MenuItem>
+                                            )}
+                                        </Select>
+                                        {error && <FormHelperText>{error.message || getIntlText('report.message.select_dashboard')}</FormHelperText>}
+                                    </FormControl>
+                                );
+                            }}
                         />
                         <Controller
                             name="reportTitle"
