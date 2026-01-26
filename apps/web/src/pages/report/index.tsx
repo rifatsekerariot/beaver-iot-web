@@ -39,14 +39,13 @@ export default function ReportPage() {
     const [generating, setGenerating] = useState(false);
     const [dashboardName, setDashboardName] = useState<string>('');
 
-    const { control, handleSubmit, watch, getValues, setValue } = useForm<FormData>({ 
+    const { control, handleSubmit, watch, getValues } = useForm<FormData>({ 
         defaultValues: {
             dashboardId: undefined,
             reportTitle: '',
             companyName: '',
             dateRange: null,
         },
-        mode: 'onChange', // Validate on change for better UX
     });
     const dashboardId = watch('dashboardId');
     const dateRange = watch('dateRange');
@@ -364,7 +363,7 @@ export default function ReportPage() {
                 setGenerating(false);
             }
         },
-        [dashboardName, getIntlText, dayjs, getTimeFormat, getValues, dashboardId, setValue],
+        [dashboardName, getIntlText, dayjs, getTimeFormat, getValues, dashboardId, dashboardList],
     );
 
     return (
@@ -387,35 +386,47 @@ export default function ReportPage() {
                                     <Select
                                         labelId="dashboard-select-label"
                                         disabled={loadingDashboards || generating}
-                                        value={field.value != null && field.value !== '' ? String(field.value) : ''}
+                                        displayEmpty
+                                        value={field.value != null && field.value !== undefined && field.value !== '' ? String(field.value) : ''}
                                         onChange={(e: SelectChangeEvent<string>) => {
-                                            const value = e.target.value;
-                                            console.log('Dashboard Select onChange - value:', value, 'Type:', typeof value);
+                                            const selectedValue = e.target.value;
+                                            console.log('[Dashboard Select] onChange triggered - selectedValue:', selectedValue, 'dashboardList length:', dashboardList?.length);
                                             
-                                            // Always call field.onChange to update form state
-                                            // Convert empty string to undefined for form state
-                                            if (value === '' || value === 'undefined' || value === 'null') {
-                                                console.log('Setting field value to undefined (empty selection)');
+                                            if (!selectedValue || selectedValue === '' || selectedValue === 'undefined' || selectedValue === 'null') {
+                                                console.log('[Dashboard Select] Empty value, setting to undefined');
                                                 field.onChange(undefined);
-                                                // Also update via setValue to ensure form state is updated
-                                                setValue('dashboardId', undefined, { shouldValidate: true, shouldDirty: true });
-                                            } else {
-                                                // Try to convert to number if it's a numeric string
-                                                const trimmed = value.trim();
-                                                const numValue = Number(trimmed);
-                                                const apiKeyValue = (!isNaN(numValue) && trimmed !== '') ? numValue : trimmed;
-                                                console.log('Setting field value to:', apiKeyValue, 'Type:', typeof apiKeyValue);
-                                                field.onChange(apiKeyValue as ApiKey);
-                                                // Also update via setValue to ensure form state is updated
-                                                setValue('dashboardId', apiKeyValue as ApiKey, { shouldValidate: true, shouldDirty: true });
+                                                return;
                                             }
                                             
-                                            // Verify form state update
+                                            // Find the dashboard to get the original ID type
+                                            const selectedDashboard = dashboardList?.find(d => {
+                                                const dId = (d as any).dashboard_id;
+                                                const dIdString = String(dId);
+                                                const match = dIdString === selectedValue || dId === selectedValue;
+                                                if (match) {
+                                                    console.log('[Dashboard Select] Found dashboard - dId:', dId, 'dIdString:', dIdString, 'selectedValue:', selectedValue);
+                                                }
+                                                return match;
+                                            });
+                                            
+                                            if (!selectedDashboard) {
+                                                console.error('[Dashboard Select] Dashboard not found for value:', selectedValue, 'Available dashboards:', dashboardList?.map(d => ({ id: (d as any).dashboard_id, name: d.name })));
+                                                field.onChange(undefined);
+                                                return;
+                                            }
+                                            
+                                            const originalId = (selectedDashboard as any).dashboard_id;
+                                            console.log('[Dashboard Select] Setting field value to original ID:', originalId, 'Type:', typeof originalId);
+                                            
+                                            // Use the original ID type (number or string) from the dashboard object
+                                            field.onChange(originalId as ApiKey);
+                                            
+                                            // Verify the update
                                             setTimeout(() => {
-                                                const currentValue = getValues('dashboardId');
+                                                const updatedValue = getValues('dashboardId');
                                                 const watchValue = watch('dashboardId');
-                                                console.log('Form state after onChange - getValues:', currentValue, 'watch:', watchValue, 'field.value:', field.value);
-                                            }, 100);
+                                                console.log('[Dashboard Select] After onChange - getValues:', updatedValue, 'watch:', watchValue, 'field.value:', field.value);
+                                            }, 50);
                                         }}
                                         onBlur={field.onBlur}
                                         name={field.name}
@@ -490,7 +501,7 @@ export default function ReportPage() {
                         <Button
                             type="submit"
                             variant="contained"
-                            disabled={generating || !dashboardId}
+                            disabled={generating || !dashboardId || dashboardId === '' || dashboardId === 'undefined'}
                             sx={{ height: 40, textTransform: 'none' }}
                         >
                             {generating
