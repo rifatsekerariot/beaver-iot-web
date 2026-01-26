@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm, Controller, type SubmitHandler } from 'react-hook-form';
-import { Box, Button, FormControl, Stack, TextField } from '@mui/material';
+import { Box, Button, FormControl, Stack, TextField, Select, MenuItem, InputLabel, FormHelperText } from '@mui/material';
 import { useRequest } from 'ahooks';
 import { useI18n, useTime } from '@milesight/shared/src/hooks';
 import { objectToCamelCase } from '@milesight/shared/src/utils/tools';
@@ -8,80 +8,74 @@ import { linkDownload, genRandomString } from '@milesight/shared/src/utils/tools
 import { toast } from '@milesight/shared/src/components';
 import { DateRangePickerValueType } from '@/components/date-range-picker';
 import { DateRangePicker } from '@/components';
-import { Breadcrumbs, TablePro, type ColumnType } from '@/components';
-import { entityAPI, awaitWrap, getResponseData, isRequestSuccess } from '@/services/http';
+import { Breadcrumbs } from '@/components';
+import { entityAPI, dashboardAPI, deviceAPI, awaitWrap, getResponseData, isRequestSuccess, type DashboardListProps } from '@/services/http';
 import { ENTITY_TYPE } from '@/constants';
-import { buildTelemetryPdf, type PdfReportRow } from './utils/pdfReport';
+import { buildTelemetryPdf, type PdfReportRow, type PdfReportDeviceSection } from './utils/pdfReport';
 
 import './style.less';
 
 type FormData = {
+    dashboardId?: ApiKey;
     reportTitle?: string;
     companyName?: string;
     dateRange?: DateRangePickerValueType | null;
 };
 
-type EntityRow = {
-    entityId: ApiKey;
-    entityName: string;
-    entityKey: string;
-    entityValueAttribute?: { unit?: string };
+type DeviceEntityGroup = {
+    deviceId: ApiKey;
+    deviceName: string;
+    entities: Array<{
+        entityId: ApiKey;
+        entityName: string;
+        entityKey: string;
+        unit?: string;
+    }>;
 };
 
 export default function ReportPage() {
     const { getIntlText } = useI18n();
     const { dayjs, getTimeFormat, timezone } = useTime();
-    const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
-    const [selectedIds, setSelectedIds] = useState<readonly ApiKey[]>([]);
     const [generating, setGenerating] = useState(false);
+    const [dashboardName, setDashboardName] = useState<string>('');
 
     const { control, handleSubmit, watch } = useForm<FormData>({ shouldUnregister: true });
+    const dashboardId = watch('dashboardId');
     const dateRange = watch('dateRange');
 
+    // Fetch dashboard list
     const {
-        data: entityData,
-        loading,
-        run: fetchEntities,
+        data: dashboardList,
+        loading: loadingDashboards,
+        run: fetchDashboards,
     } = useRequest(
         async () => {
             const [error, resp] = await awaitWrap(
-                entityAPI.advancedSearch({
-                    page_size: paginationModel.pageSize,
-                    page_number: paginationModel.page + 1,
-                    sorts: [{ direction: 'ASC' as const, property: 'key' }],
-                    entity_filter: {
-                        ENTITY_TYPE: { operator: 'ANY_EQUALS' as const, values: [ENTITY_TYPE.PROPERTY] },
-                    },
+                dashboardAPI.getDashboards({
+                    name: '',
                 }),
             );
             const data = getResponseData(resp);
             if (error || !data || !isRequestSuccess(resp)) return;
-            return objectToCamelCase(data);
+            return objectToCamelCase(data) as DashboardListProps[];
         },
-        { debounceWait: 300, refreshDeps: [paginationModel] },
+        { debounceWait: 300 },
     );
 
-    const rows = useMemo(() => entityData?.content ?? [], [entityData?.content]);
-    const rowId = useCallback((r: EntityRow) => r.entityId, []);
-
-    const columns = useMemo<ColumnType<EntityRow>[]>(
-        () => [
-            { field: 'entityName', headerName: getIntlText('report.table.entity_name'), flex: 1, minWidth: 160 },
-            { field: 'entityKey', headerName: getIntlText('device.label.param_entity_id'), flex: 1, minWidth: 180 },
-            {
-                field: 'unit',
-                headerName: getIntlText('report.table.unit'),
-                width: 80,
-                valueGetter: (_, row) => row.entityValueAttribute?.unit ?? '—',
-            },
-        ],
-        [getIntlText],
-    );
+    // Fetch dashboard detail when dashboard is selected
+    useEffect(() => {
+        if (dashboardId) {
+            const selected = dashboardList?.find(d => (d as any).dashboard_id === dashboardId);
+            setDashboardName(selected?.name ?? '');
+        } else {
+            setDashboardName('');
+        }
+    }, [dashboardId, dashboardList]);
 
     const onGenerate: SubmitHandler<FormData> = useCallback(
-        async ({ reportTitle, companyName, dateRange: dr }) => {
-            if (!selectedIds.length) {
-                toast.error(getIntlText('report.message.select_at_least_one'));
+        async ({ dashboardId: dbId, reportTitle, companyName, dateRange: dr }) => {
+            if (!dbId) {
+                toast.error(getIntlText('report.message.select_dashboard'));
                 return;
             }
             const start = dr?.start?.valueOf();
@@ -92,47 +86,164 @@ export default function ReportPage() {
             }
             setGenerating(true);
             try {
-                const pdfRows: PdfReportRow[] = [];
-
-                for (const entityId of selectedIds) {
-                    const entity = rows.find((r: EntityRow) => r.entityId === entityId) as EntityRow | undefined;
-                    const name = entity?.entityName ?? String(entityId);
-                    const unit = entity?.entityValueAttribute?.unit ?? '';
-
-                    const agg = async (t: 'LAST' | 'MIN' | 'MAX' | 'AVG') => {
-                        const [err, resp] = await awaitWrap(
-                            entityAPI.getAggregateHistory({
-                                entity_id: entityId,
-                                start_timestamp: start,
-                                end_timestamp: end,
-                                aggregate_type: t,
-                            }),
-                        );
-                        const d = !err && isRequestSuccess(resp) ? getResponseData(resp) : null;
-                        return d?.value != null ? (typeof d.value === 'number' ? d.value : Number(d.value)) : NaN;
-                    };
-
-                    const [last, min, max, avg] = await Promise.all([
-                        agg('LAST'),
-                        agg('MIN'),
-                        agg('MAX'),
-                        agg('AVG'),
-                    ]);
-
-                    pdfRows.push({ entityName: name, unit, last, min, max, avg });
+                // 1. Get dashboard detail (entity_ids)
+                const [err1, resp1] = await awaitWrap(
+                    dashboardAPI.getDashboardDetail({
+                        id: dbId,
+                    }),
+                );
+                if (err1 || !isRequestSuccess(resp1)) {
+                    toast.error(getIntlText('report.message.dashboard_not_found'));
+                    return;
+                }
+                const dashboardDetail = getResponseData(resp1);
+                const entityIds = dashboardDetail?.entityIds ?? [];
+                if (!entityIds.length) {
+                    toast.error(getIntlText('report.message.no_entities_in_dashboard'));
+                    return;
                 }
 
+                // 2. Get entities with device_id
+                const [err2, resp2] = await awaitWrap(
+                    entityAPI.advancedSearch({
+                        page_size: 1000,
+                        page_number: 1,
+                        sorts: [{ direction: 'ASC' as const, property: 'key' }],
+                        entity_filter: {
+                            ID: { operator: 'ANY_EQUALS' as const, values: entityIds },
+                            ENTITY_TYPE: { operator: 'ANY_EQUALS' as const, values: [ENTITY_TYPE.PROPERTY] },
+                        },
+                    }),
+                );
+                if (err2 || !isRequestSuccess(resp2)) {
+                    toast.error(getIntlText('report.message.failed_to_fetch_entities'));
+                    return;
+                }
+                const entityData = getResponseData(resp2);
+                const entities = (objectToCamelCase(entityData)?.content ?? []) as Array<{
+                    id: ApiKey;
+                    key: string;
+                    name: string;
+                    deviceId?: ApiKey;
+                    valueAttribute?: { unit?: string };
+                }>;
+
+                // 3. Group entities by device_id and get unique device_ids
+                const deviceIdSet = new Set<ApiKey>();
+                const entityMap = new Map<ApiKey, typeof entities>();
+                entities.forEach(entity => {
+                    const did = entity.deviceId;
+                    if (did) {
+                        deviceIdSet.add(did);
+                        if (!entityMap.has(did)) {
+                            entityMap.set(did, []);
+                        }
+                        entityMap.get(did)!.push(entity);
+                    }
+                });
+
+                const deviceIds = Array.from(deviceIdSet);
+                if (!deviceIds.length) {
+                    toast.error(getIntlText('report.message.no_devices_in_dashboard'));
+                    return;
+                }
+
+                // 4. Get device names
+                const [err3, resp3] = await awaitWrap(
+                    deviceAPI.getList({
+                        page_size: 1000,
+                        page_number: 1,
+                        id_list: deviceIds,
+                    }),
+                );
+                if (err3 || !isRequestSuccess(resp3)) {
+                    toast.error(getIntlText('report.message.failed_to_fetch_devices'));
+                    return;
+                }
+                const deviceData = getResponseData(resp3);
+                const devices = (objectToCamelCase(deviceData)?.content ?? []) as Array<{
+                    id: ApiKey;
+                    name: string;
+                }>;
+                const deviceNameMap = new Map<ApiKey, string>();
+                devices.forEach(device => {
+                    deviceNameMap.set(device.id, device.name);
+                });
+
+                // 5. Build device-entity groups
+                const deviceGroups: DeviceEntityGroup[] = deviceIds.map(deviceId => ({
+                    deviceId,
+                    deviceName: deviceNameMap.get(deviceId) ?? `Device ${deviceId}`,
+                    entities: (entityMap.get(deviceId) ?? []).map(entity => ({
+                        entityId: entity.id,
+                        entityName: entity.name,
+                        entityKey: entity.key,
+                        unit: entity.valueAttribute?.unit,
+                    })),
+                }));
+
+                // 6. Fetch aggregate data for each entity
+                const deviceSections: PdfReportDeviceSection[] = [];
+                for (const group of deviceGroups) {
+                    const rows: PdfReportRow[] = [];
+                    for (const entity of group.entities) {
+                        const agg = async (t: 'LAST' | 'MIN' | 'MAX' | 'AVG') => {
+                            const [err, resp] = await awaitWrap(
+                                entityAPI.getAggregateHistory({
+                                    entity_id: entity.entityId,
+                                    start_timestamp: start,
+                                    end_timestamp: end,
+                                    aggregate_type: t,
+                                }),
+                            );
+                            const d = !err && isRequestSuccess(resp) ? getResponseData(resp) : null;
+                            return d?.value != null ? (typeof d.value === 'number' ? d.value : Number(d.value)) : NaN;
+                        };
+
+                        const [last, min, max, avg] = await Promise.all([
+                            agg('LAST'),
+                            agg('MIN'),
+                            agg('MAX'),
+                            agg('AVG'),
+                        ]);
+
+                        rows.push({
+                            entityName: entity.entityName,
+                            unit: entity.unit ?? '',
+                            last,
+                            min,
+                            max,
+                            avg,
+                        });
+                    }
+                    if (rows.length > 0) {
+                        deviceSections.push({
+                            deviceName: group.deviceName,
+                            rows,
+                        });
+                    }
+                }
+
+                if (deviceSections.length === 0) {
+                    toast.error(getIntlText('report.message.no_data_in_range'));
+                    return;
+                }
+
+                // 7. Generate PDF
                 const dateRangeStr = `${getTimeFormat(dayjs(start), 'simpleDateFormat')} – ${getTimeFormat(dayjs(end), 'simpleDateFormat')}`;
                 const generatedAt = getTimeFormat(dayjs(), 'fullDateTimeSecondFormat');
                 const blob = buildTelemetryPdf({
                     title: reportTitle ?? '',
                     companyName: companyName ?? '',
+                    dashboardName: dashboardName || dashboardDetail?.name || '',
                     dateRange: dateRangeStr,
-                    rows: pdfRows,
+                    deviceSections,
                     generatedAt,
                     defaultTitle: getIntlText('report.pdf.default_title'),
                     generatedAtLabel: getIntlText('report.pdf.generated_at'),
                     ariotLabel: getIntlText('report.pdf.ariot'),
+                    dashboardLabel: getIntlText('report.pdf.dashboard'),
+                    deviceLabel: getIntlText('report.pdf.device'),
                     tableHeaders: {
                         entityName: getIntlText('report.table.entity_name'),
                         unit: getIntlText('report.table.unit'),
@@ -147,12 +258,13 @@ export default function ReportPage() {
                 linkDownload(blob, fileName);
                 toast.success(getIntlText('report.message.success'));
             } catch (e) {
+                console.error('PDF generation error:', e);
                 toast.error(getIntlText('report.message.generate_failed'));
             } finally {
                 setGenerating(false);
             }
         },
-        [selectedIds, rows, getIntlText, dayjs, getTimeFormat],
+        [dashboardName, getIntlText, dayjs, getTimeFormat],
     );
 
     return (
@@ -166,6 +278,28 @@ export default function ReportPage() {
                 >
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} flexWrap="wrap">
                         <Controller
+                            name="dashboardId"
+                            control={control}
+                            rules={{ required: true }}
+                            render={({ field, fieldState: { error } }) => (
+                                <FormControl size="small" sx={{ minWidth: 280 }} error={!!error} required>
+                                    <InputLabel>{getIntlText('report.form.dashboard')}</InputLabel>
+                                    <Select
+                                        {...field}
+                                        label={getIntlText('report.form.dashboard')}
+                                        disabled={loadingDashboards || generating}
+                                    >
+                                        {dashboardList?.map(dashboard => (
+                                            <MenuItem key={(dashboard as any).dashboard_id} value={(dashboard as any).dashboard_id}>
+                                                {dashboard.name}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                    {error && <FormHelperText>{getIntlText('report.message.select_dashboard')}</FormHelperText>}
+                                </FormControl>
+                            )}
+                        />
+                        <Controller
                             name="reportTitle"
                             control={control}
                             render={({ field }) => (
@@ -175,6 +309,7 @@ export default function ReportPage() {
                                     placeholder={getIntlText('report.form.report_title_placeholder')}
                                     size="small"
                                     sx={{ minWidth: 220 }}
+                                    disabled={generating}
                                 />
                             )}
                         />
@@ -188,6 +323,7 @@ export default function ReportPage() {
                                     placeholder={getIntlText('report.form.company_name_placeholder')}
                                     size="small"
                                     sx={{ minWidth: 220 }}
+                                    disabled={generating}
                                 />
                             )}
                         />
@@ -203,6 +339,7 @@ export default function ReportPage() {
                                         }}
                                         value={value as DateRangePickerValueType | null}
                                         onChange={onChange}
+                                        disabled={generating}
                                     />
                                 </FormControl>
                             )}
@@ -210,7 +347,7 @@ export default function ReportPage() {
                         <Button
                             type="submit"
                             variant="contained"
-                            disabled={generating || !selectedIds.length}
+                            disabled={generating || !dashboardId}
                             sx={{ height: 40, textTransform: 'none' }}
                         >
                             {generating
@@ -219,21 +356,6 @@ export default function ReportPage() {
                         </Button>
                     </Stack>
                 </Box>
-                <TablePro<EntityRow>
-                    tableName="report_entities"
-                    columns={columns}
-                    rows={rows}
-                    getRowId={rowId}
-                    rowCount={entityData?.total ?? 0}
-                    paginationModel={paginationModel}
-                    onPaginationModelChange={setPaginationModel}
-                    checkboxSelection
-                    rowSelectionModel={selectedIds}
-                    onRowSelectionModelChange={setSelectedIds}
-                    loading={loading}
-                    onRefreshButtonClick={fetchEntities}
-                    pageSizeOptions={[10, 20, 50, 100]}
-                />
             </div>
         </div>
     );

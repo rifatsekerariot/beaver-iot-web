@@ -1,5 +1,6 @@
 {
     "report.title": "Report",
+    "report.form.dashboard": "Dashboard",
     "report.form.report_title": "Report Title",
     "report.form.report_title_placeholder": "e.g. Q1 2025 Telemetry Summary",
     "report.form.company_name": "Company Name",
@@ -9,9 +10,16 @@
     "report.form.generate_pdf": "Generate PDF",
     "report.form.generate_pdf_loading": "Generating...",
     "report.message.success": "PDF downloaded successfully.",
+    "report.message.select_dashboard": "Please select a dashboard.",
     "report.message.select_at_least_one": "Please select at least one entity.",
     "report.message.select_date_range": "Please select date range.",
     "report.message.generate_failed": "Failed to generate PDF.",
+    "report.message.dashboard_not_found": "Dashboard not found.",
+    "report.message.no_entities_in_dashboard": "No entities found in the selected dashboard.",
+    "report.message.no_devices_in_dashboard": "No devices found in the selected dashboard.",
+    "report.message.no_data_in_range": "No data available for the selected date range.",
+    "report.message.failed_to_fetch_entities": "Failed to fetch entities.",
+    "report.message.failed_to_fetch_devices": "Failed to fetch devices.",
     "report.table.entity_name": "Entity",
     "report.table.unit": "Unit",
     "report.table.last": "Last",
@@ -20,5 +28,7 @@
     "report.table.avg": "Avg",
     "report.pdf.default_title": "Telemetry Report",
     "report.pdf.generated_at": "Generated at",
-    "report.pdf.ariot": "ARIOT"
+    "report.pdf.ariot": "ARIOT",
+    "report.pdf.dashboard": "Dashboard",
+    "report.pdf.device": "Device"
 }
