@@ -65,6 +65,7 @@ const useFormItems = ({ mode = 'login' }: UseFormItemsProps) => {
                                 const newValue = event?.target?.value;
                                 onChange(typeof newValue === 'string' ? newValue.trim() : newValue);
                             }}
+                            inputProps={{ autoComplete: 'email' }}
                             slotProps={{
                                 input: {
                                     startAdornment: (
@@ -105,6 +106,7 @@ const useFormItems = ({ mode = 'login' }: UseFormItemsProps) => {
                                 const newValue = event?.target?.value;
                                 onChange(typeof newValue === 'string' ? newValue.trim() : newValue);
                             }}
+                            inputProps={{ autoComplete: 'username' }}
                             slotProps={{
                                 input: {
                                     startAdornment: (
@@ -130,7 +132,9 @@ const useFormItems = ({ mode = 'login' }: UseFormItemsProps) => {
                     return (
                         <TextField
                             {...props}
-                            autoComplete={mode === 'login' ? undefined : 'new-password'}
+                            inputProps={{
+                                autoComplete: mode === 'login' ? 'current-password' : 'new-password',
+                            }}
                             placeholder={getIntlText('common.label.password')}
                             type={showPassword ? 'text' : 'password'}
                             error={!!error}
@@ -191,6 +195,7 @@ const useFormItems = ({ mode = 'login' }: UseFormItemsProps) => {
                             helperText={error ? error.message : null}
                             value={value}
                             onChange={onChange}
+                            inputProps={{ autoComplete: 'new-password' }}
                             slotProps={{
                                 input: {
                                     startAdornment: (
