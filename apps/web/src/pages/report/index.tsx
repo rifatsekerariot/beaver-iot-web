@@ -10,6 +10,9 @@ import { DateRangePickerValueType } from '@/components/date-range-picker';
 import { DateRangePicker } from '@/components';
 import { Breadcrumbs } from '@/components';
 import { entityAPI, dashboardAPI, deviceAPI, awaitWrap, getResponseData, isRequestSuccess, type DashboardListProps } from '@/services/http';
+import { ENTITY_TYPE } from '@/constants';
+import { getDeviceIdsInuse } from '@/components/drawing-board/utils';
+import type { WidgetDetail } from '@/services/http/dashboard';
 import { buildTelemetryPdf, type PdfReportRow, type PdfReportDeviceSection } from './utils/pdfReport';
 
 import './style.less';
@@ -257,48 +260,39 @@ export default function ReportPage() {
                         value_attribute?: { unit?: string };
                         entity_value_attribute?: { unit?: string };
                     }>;
-                    widgets?: Array<{ data?: Record<string, unknown> }>;
+                    widgets?: WidgetDetail[];
+                    device_ids?: ApiKey[];
                     name?: string;
                 } | null;
                 console.log('[ReportPage] [API] ✅ getDrawingBoardDetail success');
                 console.log('[ReportPage] [API]   - canvasDetail:', canvasDetail);
                 const entityIds = canvasDetail?.entity_ids ?? [];
                 const rawEntities = canvasDetail?.entities ?? [];
-                const widgets = canvasDetail?.widgets ?? [];
+                const widgets = (canvasDetail?.widgets ?? []) as WidgetDetail[];
                 console.log('[ReportPage] [API]   - entity_ids:', entityIds, 'count:', entityIds.length);
                 console.log('[ReportPage] [API]   - entities:', rawEntities?.length ?? 0);
                 console.log('[ReportPage] [API]   - widgets:', widgets?.length ?? 0);
 
-                // Collect entity ids from widgets (entity.value, entity_id, entityId, etc.)
-                const widgetEntityIds = new Set<ApiKey>();
+                const entityIdSet = new Set<string>();
+                const addId = (id: ApiKey | null | undefined) => {
+                    if (id != null && String(id).trim() !== '') entityIdSet.add(String(id));
+                };
+                entityIds.forEach(addId);
+                if (rawEntities.length && !entityIds.length) {
+                    rawEntities.forEach(e => addId((e.id ?? e.entity_id) as ApiKey));
+                }
                 const scan = (obj: unknown): void => {
                     if (obj == null || typeof obj !== 'object') return;
                     const o = obj as Record<string, unknown>;
                     const id = o.entity_id ?? o.entityId ?? (o.entity && typeof o.entity === 'object' && (o.entity as Record<string, unknown>).value);
-                    if (id != null && (typeof id === 'string' || typeof id === 'number')) {
-                        widgetEntityIds.add(id as ApiKey);
-                    }
-                    if (Array.isArray(o.entities)) {
-                        o.entities.forEach((e: unknown) => scan(e));
-                    }
-                    if (Array.isArray(o.entityList)) {
-                        o.entityList.forEach((e: unknown) => scan(e));
-                    }
+                    if (id != null && (typeof id === 'string' || typeof id === 'number')) addId(id as ApiKey);
+                    if (Array.isArray(o.entities)) o.entities.forEach((e: unknown) => scan(e));
+                    if (Array.isArray(o.entityList)) o.entityList.forEach((e: unknown) => scan(e));
                     if (o.data && typeof o.data === 'object') scan(o.data);
                 };
                 widgets.forEach(w => scan(w.data));
 
                 let entities: NormalizedEntity[] = [];
-
-                let idsToSearch: ApiKey[] = Array.from(
-                    new Set([
-                        ...entityIds,
-                        ...(rawEntities.length && !entityIds.length
-                            ? rawEntities.map(e => (e.id ?? e.entity_id) as ApiKey).filter(Boolean)
-                            : []),
-                        ...Array.from(widgetEntityIds),
-                    ]),
-                ).filter(id => id != null && String(id).trim() !== '') as ApiKey[];
 
                 if (rawEntities.length > 0) {
                     const mapped: NormalizedEntity[] = rawEntities.flatMap(
@@ -319,13 +313,61 @@ export default function ReportPage() {
                     }
                 }
 
-                const mapResponseToEntities = (raw: unknown): NormalizedEntity[] => {
-                    const list = Array.isArray((raw as any)?.content)
-                        ? (raw as any).content
-                        : Array.isArray((raw as any)?.data)
-                          ? (raw as any).data
+                if (entities.length === 0) {
+                    let deviceIds: ApiKey[] = Array.from(
+                        new Set([
+                            ...(canvasDetail?.device_ids ?? []),
+                            ...(getDeviceIdsInuse(widgets) ?? []),
+                        ]),
+                    ).filter(Boolean);
+                    if (deviceIds.length === 0) {
+                        console.log('[ReportPage] [API] Step 2a: No device_ids from canvas/widgets, fetching all devices...');
+                        const [errDev, respDev] = await awaitWrap(
+                            deviceAPI.getList({ page_size: 100, page_number: 1 }),
+                        );
+                        if (errDev || !isRequestSuccess(respDev)) {
+                            console.error('[ReportPage] [API] ❌ deviceAPI.getList (all) failed');
+                            toast.error(getIntlText('report.message.failed_to_fetch_entities'));
+                            return;
+                        }
+                        const devData = getResponseData(respDev) as { content?: Array<{ id?: ApiKey }> } | null;
+                        deviceIds = (devData?.content ?? []).map(d => d.id).filter(Boolean) as ApiKey[];
+                        console.log('[ReportPage] [API]   - devices from getList:', deviceIds.length);
+                    }
+                    if (deviceIds.length === 0) {
+                        console.error('[ReportPage] [API] ❌ No devices available for entity fetch');
+                        toast.error(getIntlText('report.message.no_entities_in_dashboard'));
+                        return;
+                    }
+                    const cap = 50;
+                    const idsToQuery = deviceIds.slice(0, cap);
+                    console.log('[ReportPage] [API] Step 2b: Fetching entities by DEVICE_ID + ENTITY_TYPE (like Device Entity Data), devices:', idsToQuery.length);
+
+                    const [err2, r2] = await awaitWrap(
+                        entityAPI.advancedSearch({
+                            page_size: 1000,
+                            page_number: 1,
+                            sorts: [{ direction: 'ASC' as const, property: 'key' }],
+                            entity_filter: {
+                                DEVICE_ID: { operator: 'ANY_EQUALS' as const, values: idsToQuery },
+                                ENTITY_TYPE: { operator: 'ANY_EQUALS' as const, values: [ENTITY_TYPE.PROPERTY] },
+                            },
+                        }),
+                    );
+                    if (err2 || !isRequestSuccess(r2)) {
+                        console.error('[ReportPage] [API] ❌ advancedSearch(DEVICE_ID) failed');
+                        const errorCode = (r2 as { data?: { error_code?: string } })?.data?.error_code;
+                        if (errorCode === 'authentication_failed') return;
+                        toast.error(getIntlText('report.message.failed_to_fetch_entities'));
+                        return;
+                    }
+                    const entityData = getResponseData(r2);
+                    const list = Array.isArray((entityData as any)?.content)
+                        ? (entityData as any).content
+                        : Array.isArray((entityData as any)?.data)
+                          ? (entityData as any).data
                           : [];
-                    return list.map((item: Record<string, unknown>) => {
+                    const raw = list.map((item: Record<string, unknown>) => {
                         const id = (item.id ?? item.entity_id) as ApiKey | undefined;
                         if (!id) return null;
                         const key = String(item.key ?? item.entity_key ?? '');
@@ -334,56 +376,13 @@ export default function ReportPage() {
                         const va = (item.value_attribute ?? item.entity_value_attribute) as { unit?: string } | undefined;
                         return { entityId: id, entityKey: key, entityName: name, deviceId, entityValueAttribute: va };
                     }).filter(Boolean) as NormalizedEntity[];
-                };
-
-                if (entities.length === 0 && idsToSearch.length > 0) {
-                    const filterValues = idsToSearch;
-                    const filterPayload = { operator: 'ANY_EQUALS' as const, values: filterValues };
-                    console.log('[ReportPage] [API] Step 2: Fetching entities by ENTITY_ID filter, ids:', filterValues.length);
-
-                    let entityData: unknown = null;
-                    let fetchOk = false;
-                    let resp2: unknown = null;
-
-                    const [err2, r2] = await awaitWrap(
-                        entityAPI.advancedSearch({
-                            page_size: 1000,
-                            page_number: 1,
-                            sorts: [{ direction: 'ASC' as const, property: 'key' }],
-                            entity_filter: {
-                                ENTITY_ID: filterPayload,
-                            },
-                        }),
-                    );
-                    resp2 = r2;
-                    if (!err2 && isRequestSuccess(r2)) {
-                        entityData = getResponseData(r2);
-                        fetchOk = !!entityData && typeof entityData === 'object';
+                    if (entityIdSet.size > 0) {
+                        entities = raw.filter(e => entityIdSet.has(String(e.entityId)));
+                        console.log('[ReportPage] [API]   - filtered by entity_ids:', entities.length, 'of', raw.length);
+                    } else {
+                        entities = raw;
                     }
-                    if (!fetchOk) {
-                        console.warn('[ReportPage] [API] advancedSearch failed, trying entityAPI.getList...');
-                        const [errList, respList] = await awaitWrap(
-                            entityAPI.getList({
-                                page_size: 1000,
-                                page_number: 1,
-                                entity_filter: { ENTITY_ID: filterPayload },
-                            }),
-                        );
-                        if (!errList && isRequestSuccess(respList)) {
-                            entityData = getResponseData(respList);
-                            fetchOk = !!entityData && typeof entityData === 'object';
-                        }
-                    }
-
-                    if (!fetchOk || !entityData) {
-                        console.error('[ReportPage] [API] ❌ entity fetch failed (advancedSearch + getList)');
-                        const errorCode = (resp2 as { data?: { error_code?: string } })?.data?.error_code;
-                        if (errorCode === 'authentication_failed') return;
-                        toast.error(getIntlText('report.message.failed_to_fetch_entities'));
-                        return;
-                    }
-                    entities = mapResponseToEntities(entityData);
-                    console.log('[ReportPage] [API] ✅ entities fetched, count:', entities.length);
+                    console.log('[ReportPage] [API] ✅ entities fetched by DEVICE_ID, count:', entities.length);
                 }
 
                 if (!entities.length) {
