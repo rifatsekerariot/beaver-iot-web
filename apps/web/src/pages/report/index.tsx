@@ -192,13 +192,14 @@ export default function ReportPage() {
                         return;
                     }
                     const numValue = Number(trimmed);
-                    if (!isNaN(numValue) && trimmed !== '') {
+                    // Büyük ID'ler (örn. 2016084489482240000) Number'da precision kaybına uğrar; string bırak.
+                    const safeAsNumber = !isNaN(numValue) && numValue >= -Number.MAX_SAFE_INTEGER && numValue <= Number.MAX_SAFE_INTEGER;
+                    if (safeAsNumber && trimmed !== '') {
                         dashboardIdForApi = numValue;
                         console.log('[ReportPage] [API]   - Converted string to number:', dashboardIdForApi);
                     } else {
-                        // Keep as string if not a valid number
                         dashboardIdForApi = trimmed;
-                        console.log('[ReportPage] [API]   - Kept as string:', dashboardIdForApi);
+                        console.log('[ReportPage] [API]   - Kept as string (non-numeric or large ID):', dashboardIdForApi);
                     }
                 } else if (typeof dbId === 'number') {
                     dashboardIdForApi = dbId;
@@ -222,7 +223,32 @@ export default function ReportPage() {
                 const selectedDashboard = dashboardList?.find(
                     d => String(d.dashboard_id) === String(dashboardIdForApi) || d.dashboard_id === dashboardIdForApi,
                 );
-                const mainCanvasId = selectedDashboard?.main_canvas_id;
+                let mainCanvasId: ApiKey | undefined | null = selectedDashboard?.main_canvas_id;
+                // Fallback: POST /dashboard/search bazen main_canvas_id döndürmeyebilir. Canvas listesinden al.
+                if (mainCanvasId == null || mainCanvasId === '') {
+                    console.log('[ReportPage] [API] main_canvas_id list item\'da yok, getDrawingBoardList ile alınıyor...');
+                    const [errList, respList] = await awaitWrap(
+                        dashboardAPI.getDrawingBoardList({ dashboard_id: dashboardIdForApi }),
+                    );
+                    if (!errList && isRequestSuccess(respList)) {
+                        const listData = getResponseData(respList) as unknown;
+                        let arr: Array<{ canvas_id?: string; id?: string }> = [];
+                        if (Array.isArray(listData)) {
+                            arr = listData;
+                        } else if (listData != null && typeof listData === 'object') {
+                            const o = listData as Record<string, unknown>;
+                            if (Array.isArray(o.data)) arr = o.data as Array<{ canvas_id?: string; id?: string }>;
+                            else if (Array.isArray(o.content)) arr = o.content as Array<{ canvas_id?: string; id?: string }>;
+                            else if (o.canvas_id != null || (o as { id?: string }).id != null) arr = [o as { canvas_id?: string; id?: string }];
+                        }
+                        const first = arr[0];
+                        const cid = first?.canvas_id ?? first?.id;
+                        if (cid != null && cid !== '') {
+                            mainCanvasId = cid as ApiKey;
+                            console.log('[ReportPage] [API] getDrawingBoardList fallback: canvas_id=', mainCanvasId);
+                        }
+                    }
+                }
                 if (!mainCanvasId && mainCanvasId !== 0) {
                     console.error('[ReportPage] [API] ❌ main_canvas_id not found for dashboard:', dashboardIdForApi);
                     toast.error(getIntlText('report.message.dashboard_not_found'));
