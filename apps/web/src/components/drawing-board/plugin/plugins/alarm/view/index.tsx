@@ -1,8 +1,9 @@
 import React, { useContext, useMemo, useRef } from 'react';
 import cls from 'classnames';
+import { Link } from 'react-router-dom';
 import { GridFooter } from '@mui/x-data-grid';
 
-import { useTheme } from '@milesight/shared/src/hooks';
+import { useTheme, useI18n } from '@milesight/shared/src/hooks';
 
 import { TablePro, Tooltip } from '@/components';
 import { DrawingBoardContext } from '@/components/drawing-board/context';
@@ -100,9 +101,16 @@ const AlarmView: React.FC<AlarmViewProps> = props => {
         ],
     );
 
+    const { getIntlText } = useI18n();
+    const showManageRulesLink = !isPreview && !context?.isEdit;
     const RenderTitle = (
         <div className="alarm-view__title">
             <Tooltip autoEllipsis title={title} />
+            {showManageRulesLink && (
+                <Link to="/alarm" className="alarm-view__title-link">
+                    {getIntlText('alarm.manage_rules') || 'Kuralları yönet'}
+                </Link>
+            )}
         </div>
     );
 

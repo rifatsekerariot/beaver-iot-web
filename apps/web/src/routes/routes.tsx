@@ -175,6 +175,22 @@ const routes: RouteObjectType[] = [
         ],
     },
     {
+        path: '/alarm',
+        handle: {
+            get title() {
+                return intl.get('alarm.title') || 'Alarm';
+            },
+            mobileAccessible: true,
+            icon: <AntFallAttentionIcon fontSize="small" />,
+            permissions: PERMISSIONS.DEVICE_MODULE,
+        },
+        async lazy() {
+            const { default: Component } = await import('@/pages/alarm');
+            return { Component };
+        },
+        ErrorBoundary,
+    },
+    {
         path: '/workflow',
         element: <Outlet />,
         ErrorBoundary,

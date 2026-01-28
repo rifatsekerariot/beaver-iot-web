@@ -74,6 +74,13 @@ export enum PERMISSIONS {
     TAG_MODULE = 'tag',
     TAG_MODULE_VIEW = 'entity_tag.view',
     TAG_MODULE_MANAGE = 'entity_tag.manage',
+
+    /**
+     * Alarm module (Faz 1: use DEVICE_MODULE for route; backend uses DEVICE_VIEW)
+     */
+    ALARM_MODULE = 'alarm',
+    ALARM_VIEW = 'alarm.view',
+    ALARM_CLAIM = 'alarm.claim',
 }
 
 // Entity Pattern
