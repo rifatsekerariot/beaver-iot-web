@@ -145,10 +145,10 @@ const AlarmList: React.FC = () => {
             },
             {
                 field: '$operation',
-                type: 'string',
+                type: 'string' as const,
                 headerName: getIntlText('common.label.operation'),
                 width: 100,
-                fixed: 'right',
+                fixed: 'right' as const,
                 renderCell: ({ row }: { row?: { id?: ApiKey; deviceId?: ApiKey; alarmStatus?: boolean; latitude?: number; longitude?: number } }) => (
                     <Stack direction="row" spacing={0.5}>
                         <LoadingWrapper size={20} loading={!!(row && claimLoading[String(row.deviceId)])}>
